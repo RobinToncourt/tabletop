@@ -22,6 +22,9 @@ echo "Optimizing..."
 ~/Tools/binaryen/bin/wasm-opt -Oz --enable-bulk-memory --enable-nontrapping-float-to-int --enable-reference-types -o www/tabletop_bg.wasm $OUTPUT
 
 echo "Compressing..."
-gzip --keep $OUTPUT
+gzip --keep -f $OUTPUT
+
+echo "Copying assets..."
+#cp -r assets/ www
 
 echo "Done!"

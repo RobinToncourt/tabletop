@@ -66,13 +66,17 @@ const CARDS: [&str; 54] = [
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
+        .init_resource::<WorldCursorPosition>()
         .add_systems(Startup, setup)
         .add_observer(move_card)
         .run();
 }
 
 #[derive(Component)]
-struct MainWindow;
+struct MainCamera;
+
+#[derive(Resource, Default)]
+struct WorldCursorPosition(Option<Vec2>);
 
 #[derive(Component)]
 struct Card;
@@ -81,7 +85,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     let ace_of_spades = asset_server.load("cards/ace_of_spades.png");
     let ace_of_diamonds = asset_server.load("cards/ace_of_diamonds.png");
 
-    commands.spawn(Camera2d);
+    commands.spawn((Camera2d, MainCamera));
 
     let sprite_size = CARD_SIZE / 10.0;
 
@@ -111,11 +115,19 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 fn move_card(
     on_drag: On<Pointer<Drag>>,
     mut query: Query<&mut Transform>,
+    q_window: Query<&Window, With<PrimaryWindow>>,
+    q_camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
 ) {
     info!("Dragging");
-    if let Ok(mut transform) = query.get_mut(on_drag.event_target()) {
-        transform.translation.x = on_drag.distance.x;
-        transform.translation.y = -on_drag.distance.y;
+    let transform = query.get_mut(on_drag.event_target());
+    let (camera, camera_transform) = q_camera.single().unwrap();
+    let window = q_window.single().unwrap().cursor_position();
+
+    if let (Ok(mut transform), Some(screen_pos)) = (transform, window) {
+        if let Ok(position) = camera.viewport_to_world_2d(camera_transform, screen_pos) {
+            transform.translation.x = position.x;
+            transform.translation.y = position.y;
+        }
     }
 }
 
