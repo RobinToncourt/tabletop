@@ -2,72 +2,101 @@
 
 use std::fmt::Debug;
 
-use bevy::prelude::*;
+use bevy::{camera::ScalingMode, input::mouse::AccumulatedMouseScroll, prelude::*};
 use bevy::window::PrimaryWindow;
 
-const CARD_SIZE: Vec2 = Vec2::new(500.0, 726.0);
-const CARDS: [&str; 54] = [
-    "10_of_clubs.png",
-    "10_of_diamonds.png",
-    "10_of_hearts.png",
-    "10_of_spades.png",
-    "2_of_clubs.png",
-    "2_of_diamonds.png",
-    "2_of_hearts.png",
-    "2_of_spades.png",
-    "3_of_clubs.png",
-    "3_of_diamonds.png",
-    "3_of_hearts.png",
-    "3_of_spades.png",
-    "4_of_clubs.png",
-    "4_of_diamonds.png",
-    "4_of_hearts.png",
-    "4_of_spades.png",
-    "5_of_clubs.png",
-    "5_of_diamonds.png",
-    "5_of_hearts.png",
-    "5_of_spades.png",
-    "6_of_clubs.png",
-    "6_of_diamonds.png",
-    "6_of_hearts.png",
-    "6_of_spades.png",
-    "7_of_clubs.png",
-    "7_of_diamonds.png",
-    "7_of_hearts.png",
-    "7_of_spades.png",
-    "8_of_clubs.png",
-    "8_of_diamonds.png",
-    "8_of_hearts.png",
-    "8_of_spades.png",
-    "9_of_clubs.png",
-    "9_of_diamonds.png",
-    "9_of_hearts.png",
-    "9_of_spades.png",
-    "ace_of_clubs.png",
-    "ace_of_diamonds.png",
-    "ace_of_hearts.png",
+macro_rules! unwrap_or_return {
+    (ok $result:expr) => {
+        {
+            match $result {
+                Ok(ok) => ok,
+                Err(_) => return,
+            }
+        }
+    };
+    (some $option:expr) => {
+        {
+            match $option {
+                Some(some) => some,
+                None => return,
+            }
+        }
+    }
+}
+
+const CARD_IMAGES: &[&str] = &[
+    // ♠️ Spades
     "ace_of_spades.png",
-    "black_joker.png",
-    "jack_of_clubs2.png",
-    "jack_of_diamonds2.png",
-    "jack_of_hearts2.png",
+    "2_of_spades.png",
+    "3_of_spades.png",
+    "4_of_spades.png",
+    "5_of_spades.png",
+    "6_of_spades.png",
+    "7_of_spades.png",
+    "8_of_spades.png",
+    "9_of_spades.png",
+    "10_of_spades.png",
     "jack_of_spades2.png",
-    "king_of_clubs2.png",
-    "king_of_diamonds2.png",
-    "king_of_hearts2.png",
-    "king_of_spades2.png",
-    "queen_of_clubs2.png",
-    "queen_of_diamonds2.png",
-    "queen_of_hearts2.png",
     "queen_of_spades2.png",
+    "king_of_spades2.png",
+
+    // ♦️ Diamonds
+    "ace_of_diamonds.png",
+    "2_of_diamonds.png",
+    "3_of_diamonds.png",
+    "4_of_diamonds.png",
+    "5_of_diamonds.png",
+    "6_of_diamonds.png",
+    "7_of_diamonds.png",
+    "8_of_diamonds.png",
+    "9_of_diamonds.png",
+    "10_of_diamonds.png",
+    "jack_of_diamonds2.png",
+    "queen_of_diamonds2.png",
+    "king_of_diamonds2.png",
+
+    // ♣️ Clubs
+    "ace_of_clubs.png",
+    "2_of_clubs.png",
+    "3_of_clubs.png",
+    "4_of_clubs.png",
+    "5_of_clubs.png",
+    "6_of_clubs.png",
+    "7_of_clubs.png",
+    "8_of_clubs.png",
+    "9_of_clubs.png",
+    "10_of_clubs.png",
+    "jack_of_clubs2.png",
+    "queen_of_clubs2.png",
+    "king_of_clubs2.png",
+
+    // ♥️ Hearts
+    "ace_of_hearts.png",
+    "2_of_hearts.png",
+    "3_of_hearts.png",
+    "4_of_hearts.png",
+    "5_of_hearts.png",
+    "6_of_hearts.png",
+    "7_of_hearts.png",
+    "8_of_hearts.png",
+    "9_of_hearts.png",
+    "10_of_hearts.png",
+    "jack_of_hearts2.png",
+    "queen_of_hearts2.png",
+    "king_of_hearts2.png",
+
+    // 🃏 Jokers
+    "black_joker.png",
     "red_joker.png",
 ];
+const CARD_SIZE: Vec2 = Vec2::new(500.0, 726.0);
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .init_resource::<WorldCursorPosition>()
         .add_systems(Startup, setup)
+        .add_systems(Update, zoom_in)
         .add_observer(move_card)
         .run();
 }
@@ -82,46 +111,45 @@ struct WorldCursorPosition(Option<Vec2>);
 struct Card;
 
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let ace_of_spades = asset_server.load("cards/ace_of_spades.png");
-    let ace_of_diamonds = asset_server.load("cards/ace_of_diamonds.png");
+    let sprite_size = CARD_SIZE / 10.0;
 
     commands.spawn((Camera2d, MainCamera));
 
-    let sprite_size = CARD_SIZE / 10.0;
+    let start_x_offset = -325.0;
+    let start_y_offset = 108.9;
 
     // Spawn cards.
-    commands.spawn((
-        Sprite {
-            image: ace_of_diamonds,
-            custom_size: Some(sprite_size),
-            ..default()
-        },
-        Card,
-        Pickable::default(),
-        Transform::from_xyz(-250.0, 0.0, 0.0),
-    ));
+    let mut y_pos = -1.0;
+    for (i, card) in CARD_IMAGES.iter().enumerate() {
+        let x_pos = i as f32 % 13.0;
+        if x_pos == 0.0 {
+            y_pos += 1.0;
+        }
 
-    commands.spawn((
-        Sprite {
-            image: ace_of_spades,
-            custom_size: Some(sprite_size),
-            ..default()
-        },
-        Card,
-        Pickable::default(),
-    ));
+        let sprite_path = format!("cards/{card}");
+
+        commands.spawn((
+            Sprite {
+                image: asset_server.load(&sprite_path),
+                custom_size: Some(sprite_size),
+                ..default()
+            },
+            Card,
+            Pickable::default(),
+            Transform::from_xyz(start_x_offset + x_pos * sprite_size.x, start_y_offset - y_pos * sprite_size.y, 0.0),
+        ));
+    }
 }
 
 fn move_card(
     on_drag: On<Pointer<Drag>>,
-    mut query: Query<&mut Transform>,
+    mut query: Query<&mut Transform, With<Card>>,
     q_window: Query<&Window, With<PrimaryWindow>>,
     q_camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
 ) {
-    info!("Dragging");
     let transform = query.get_mut(on_drag.event_target());
-    let (camera, camera_transform) = q_camera.single().unwrap();
-    let window = q_window.single().unwrap().cursor_position();
+    let (camera, camera_transform) = unwrap_or_return!(ok q_camera.single());
+    let window = unwrap_or_return!(ok q_window.single()).cursor_position();
 
     if let (Ok(mut transform), Some(screen_pos)) = (transform, window) {
         if let Ok(position) = camera.viewport_to_world_2d(camera_transform, screen_pos) {
@@ -131,41 +159,17 @@ fn move_card(
     }
 }
 
-fn move_cards_example(time: Res<Time>, mut cards: Query<&mut Transform, (With<Card>,)>) {
-    let t = time.elapsed_secs() * 0.1;
-    for mut transform in &mut cards {
-        let new = Vec2 {
-            x: 50.0 * ops::sin(t),
-            y: 50.0 * ops::sin(t * 2.0),
-        };
-        transform.translation.x = new.x;
-        transform.translation.y = new.y;
+fn zoom_in(
+    camera: Single<&mut Projection, With<MainCamera>>,
+    mouse_wheel_input: Res<AccumulatedMouseScroll>,
+    time: Res<Time>,
+) {
+    match *camera.into_inner() {
+        Projection::Orthographic(ref mut orthographic) => {
+            let mut log_scale = orthographic.scale.ln();
+            log_scale -= mouse_wheel_input.delta.y * time.delta_secs() * 10.0;
+            orthographic.scale = log_scale.exp();
+        }
+        _ => (),
     }
 }
-
-/*
-   . observe(*|over: On<Pointer<Over>>| {
-   info!("Over");
-   })
-   .observe(|out: On<Pointer<Out>>| {
-   info!("Out");
-   })
-   .observe(|press: On<Pointer<Press>>| {
-   info!("Press");
-   })
-   .observe(|release: On<Pointer<Release>>| {
-   info!("Release");
-   })
-   .observe(|on_drag_start: On<Pointer<DragStart>>| {
-   info!("Drag start");
-   })
-   .observe(|on_drag: On<Pointer<Drag>>, query: Query<&mut Transform>| {
-   move_card(on_drag, query);
-   })
-   .observe(|on_drag_end: On<Pointer<DragEnd>>| {
-   info!("Drag end");
-   })
-   .observe(|on_drag_drop: On<Pointer<DragDrop>>| {
-   info!("Drag drop");
-   })
-*/
