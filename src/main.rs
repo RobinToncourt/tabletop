@@ -17,7 +17,6 @@ const CARD_IMAGES: &[&str] = &[
     "jack_of_spades2.png",
     "queen_of_spades2.png",
     "king_of_spades2.png",
-
     // ♦️ Diamonds
     "ace_of_diamonds.png",
     "2_of_diamonds.png",
@@ -32,7 +31,6 @@ const CARD_IMAGES: &[&str] = &[
     "jack_of_diamonds2.png",
     "queen_of_diamonds2.png",
     "king_of_diamonds2.png",
-
     // ♣️ Clubs
     "ace_of_clubs.png",
     "2_of_clubs.png",
@@ -47,7 +45,6 @@ const CARD_IMAGES: &[&str] = &[
     "jack_of_clubs2.png",
     "queen_of_clubs2.png",
     "king_of_clubs2.png",
-
     // ♥️ Hearts
     "ace_of_hearts.png",
     "2_of_hearts.png",
@@ -62,7 +59,6 @@ const CARD_IMAGES: &[&str] = &[
     "jack_of_hearts2.png",
     "queen_of_hearts2.png",
     "king_of_hearts2.png",
-
     // 🃏 Jokers
     "black_joker.png",
     "red_joker.png",
@@ -77,19 +73,13 @@ const SCROLL_FACTOR: f32 = 0.2;
 
 fn main() {
     App::new()
-        .add_plugins(
-            DefaultPlugins
-                .build()
-                .set(
-                    WindowPlugin {
-                        primary_window: Some(Window {
-                            fit_canvas_to_parent: true,
-                            ..default()
-                        }),
-                        ..default()
-                    }
-                )
-        )
+        .add_plugins(DefaultPlugins.build().set(WindowPlugin {
+            primary_window: Some(Window {
+                fit_canvas_to_parent: true,
+                ..default()
+            }),
+            ..default()
+        }))
         .add_systems(Startup, setup)
         .add_systems(Update, (zoom_in, move_camera))
         .run();
@@ -123,25 +113,18 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         let transform = Transform::from_xyz(
             start_x_offset + x_pos * sprite_size.x,
             start_y_offset - y_pos * sprite_size.y,
-            0.0
+            0.0,
         );
 
-        commands.spawn((
-            sprite,
-            Card,
-            Pickable::default(),
-            transform,
-        ))
-        .observe(card_drag_start)
-        .observe(card_drag)
-        .observe(card_drag_end);
+        commands
+            .spawn((sprite, Card, Pickable::default(), transform))
+            .observe(card_drag_start)
+            .observe(card_drag)
+            .observe(card_drag_end);
     }
 }
 
-fn card_drag_start(
-    on_drag_start: On<Pointer<DragStart>>,
-    mut query: Query<&mut GlobalZIndex>,
-) {
+fn card_drag_start(on_drag_start: On<Pointer<DragStart>>, mut query: Query<&mut GlobalZIndex>) {
     if let Ok(mut global_zindex) = query.get_mut(on_drag_start.event_target()) {
         global_zindex.0 += 100;
     }
@@ -151,7 +134,7 @@ fn card_drag(
     on_drag: On<Pointer<Drag>>,
     mut query: Query<&mut Transform>,
     camera: Single<(&Camera, &GlobalTransform)>,
-             windows: Query<&Window>,
+    windows: Query<&Window>,
 ) {
     let Ok(window) = windows.single() else {
         return;
@@ -161,9 +144,9 @@ fn card_drag(
 
     let transform = query.get_mut(on_drag.event_target());
     let position = window
-    .cursor_position()
-    .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor).ok())
-    .map(|ray| ray.origin.truncate());
+        .cursor_position()
+        .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor).ok())
+        .map(|ray| ray.origin.truncate());
 
     if let (Ok(mut transform), Some(position)) = (transform, position) {
         transform.translation.x = position.x;
@@ -171,10 +154,7 @@ fn card_drag(
     }
 }
 
-fn card_drag_end(
-    on_drag_start: On<Pointer<DragEnd>>,
-    mut query: Query<&mut GlobalZIndex>,
-) {
+fn card_drag_end(on_drag_start: On<Pointer<DragEnd>>, mut query: Query<&mut GlobalZIndex>) {
     if let Ok(mut global_zindex) = query.get_mut(on_drag_start.event_target()) {
         global_zindex.0 -= 100;
     }
