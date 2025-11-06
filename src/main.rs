@@ -1,28 +1,6 @@
-#![allow(dead_code, unused, unused_imports)]
+//#![allow(dead_code, unused, unused_imports)]
 
-use std::fmt::Debug;
-
-use bevy::{camera::ScalingMode, input::mouse::AccumulatedMouseScroll, prelude::*};
-use bevy::window::PrimaryWindow;
-
-macro_rules! unwrap_or_return {
-    (ok $result:expr) => {
-        {
-            match $result {
-                Ok(ok) => ok,
-                Err(_) => return,
-            }
-        }
-    };
-    (some $option:expr) => {
-        {
-            match $option {
-                Some(some) => some,
-                None => return,
-            }
-        }
-    }
-}
+use bevy::{input::mouse::AccumulatedMouseScroll, prelude::*};
 
 const CARD_IMAGES: &[&str] = &[
     // ♠️ Spades
@@ -91,21 +69,31 @@ const CARD_IMAGES: &[&str] = &[
 ];
 const CARD_SIZE: Vec2 = Vec2::new(500.0, 726.0);
 
+#[cfg(not(target_arch = "wasm32"))]
+const SCROLL_FACTOR: f32 = 10.0;
+
+#[cfg(target_arch = "wasm32")]
+const SCROLL_FACTOR: f32 = 0.2;
+
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
-        .init_resource::<WorldCursorPosition>()
+        .add_plugins(
+            DefaultPlugins
+                .build()
+                .set(
+                    WindowPlugin {
+                        primary_window: Some(Window {
+                            fit_canvas_to_parent: true,
+                            ..default()
+                        }),
+                        ..default()
+                    }
+                )
+        )
         .add_systems(Startup, setup)
-        .add_systems(Update, zoom_in)
-        .add_observer(move_card)
+        .add_systems(Update, (zoom_in, move_camera))
         .run();
 }
-
-#[derive(Component)]
-struct MainCamera;
-
-#[derive(Resource, Default)]
-struct WorldCursorPosition(Option<Vec2>);
 
 #[derive(Component)]
 struct Card;
@@ -113,7 +101,7 @@ struct Card;
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     let sprite_size = CARD_SIZE / 10.0;
 
-    commands.spawn((Camera2d, MainCamera));
+    commands.spawn(Camera2d);
 
     let start_x_offset = -325.0;
     let start_y_offset = 108.9;
@@ -127,49 +115,108 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         }
 
         let sprite_path = format!("cards/{card}");
+        let sprite = Sprite {
+            image: asset_server.load(&sprite_path),
+            custom_size: Some(sprite_size),
+            ..default()
+        };
+        let transform = Transform::from_xyz(
+            start_x_offset + x_pos * sprite_size.x,
+            start_y_offset - y_pos * sprite_size.y,
+            0.0
+        );
 
         commands.spawn((
-            Sprite {
-                image: asset_server.load(&sprite_path),
-                custom_size: Some(sprite_size),
-                ..default()
-            },
+            sprite,
             Card,
             Pickable::default(),
-            Transform::from_xyz(start_x_offset + x_pos * sprite_size.x, start_y_offset - y_pos * sprite_size.y, 0.0),
-        ));
+            transform,
+        ))
+        .observe(card_drag_start)
+        .observe(card_drag)
+        .observe(card_drag_end);
     }
 }
 
-fn move_card(
-    on_drag: On<Pointer<Drag>>,
-    mut query: Query<&mut Transform, With<Card>>,
-    q_window: Query<&Window, With<PrimaryWindow>>,
-    q_camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
+fn card_drag_start(
+    on_drag_start: On<Pointer<DragStart>>,
+    mut query: Query<&mut GlobalZIndex>,
 ) {
-    let transform = query.get_mut(on_drag.event_target());
-    let (camera, camera_transform) = unwrap_or_return!(ok q_camera.single());
-    let window = unwrap_or_return!(ok q_window.single()).cursor_position();
+    if let Ok(mut global_zindex) = query.get_mut(on_drag_start.event_target()) {
+        global_zindex.0 += 100;
+    }
+}
 
-    if let (Ok(mut transform), Some(screen_pos)) = (transform, window) {
-        if let Ok(position) = camera.viewport_to_world_2d(camera_transform, screen_pos) {
-            transform.translation.x = position.x;
-            transform.translation.y = position.y;
-        }
+fn card_drag(
+    on_drag: On<Pointer<Drag>>,
+    mut query: Query<&mut Transform>,
+    camera: Single<(&Camera, &GlobalTransform)>,
+             windows: Query<&Window>,
+) {
+    let Ok(window) = windows.single() else {
+        return;
+    };
+
+    let (camera, camera_transform) = *camera;
+
+    let transform = query.get_mut(on_drag.event_target());
+    let position = window
+    .cursor_position()
+    .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor).ok())
+    .map(|ray| ray.origin.truncate());
+
+    if let (Ok(mut transform), Some(position)) = (transform, position) {
+        transform.translation.x = position.x;
+        transform.translation.y = position.y;
+    }
+}
+
+fn card_drag_end(
+    on_drag_start: On<Pointer<DragEnd>>,
+    mut query: Query<&mut GlobalZIndex>,
+) {
+    if let Ok(mut global_zindex) = query.get_mut(on_drag_start.event_target()) {
+        global_zindex.0 -= 100;
     }
 }
 
 fn zoom_in(
-    camera: Single<&mut Projection, With<MainCamera>>,
+    camera: Single<&mut Projection>,
     mouse_wheel_input: Res<AccumulatedMouseScroll>,
     time: Res<Time>,
 ) {
     match *camera.into_inner() {
         Projection::Orthographic(ref mut orthographic) => {
             let mut log_scale = orthographic.scale.ln();
-            log_scale -= mouse_wheel_input.delta.y * time.delta_secs() * 10.0;
+            log_scale -= mouse_wheel_input.delta.y * time.delta_secs() * SCROLL_FACTOR;
             orthographic.scale = log_scale.exp();
         }
         _ => (),
     }
+}
+
+fn move_camera(
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    mut camera: Single<&mut Transform, (With<Camera2d>, Without<Card>)>,
+) {
+    let mut direction = Vec2::ZERO;
+
+    if keyboard_input.pressed(KeyCode::KeyW) || keyboard_input.pressed(KeyCode::ArrowUp) {
+        direction.y += 1.0;
+    }
+
+    if keyboard_input.pressed(KeyCode::KeyS) || keyboard_input.pressed(KeyCode::ArrowDown) {
+        direction.y -= 1.0;
+    }
+
+    if keyboard_input.pressed(KeyCode::KeyD) || keyboard_input.pressed(KeyCode::ArrowRight) {
+        direction.x += 1.0;
+    }
+
+    if keyboard_input.pressed(KeyCode::KeyA) || keyboard_input.pressed(KeyCode::ArrowLeft) {
+        direction.x -= 1.0;
+    }
+
+    camera.translation.x += direction.x;
+    camera.translation.y += direction.y;
 }
