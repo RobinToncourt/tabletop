@@ -24,6 +24,8 @@ jobs:
                     target/
                 key: ${{ github.ref || github.run_id }}
             - uses: dtolnay/rust-toolchain@stable
+            - name: Install wabt
+              run: sudo apt-get update; sudo apt-get install wabt
             - uses: jetli/wasm-bindgen-action@v0.2.0
               with:
                 version: 'latest'
