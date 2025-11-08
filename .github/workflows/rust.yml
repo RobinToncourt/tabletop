@@ -61,7 +61,7 @@ jobs:
                 path: "./out"
 
     deploy:
-        need: build
+        needs: build
         runs-on: ubuntu-latest
 
         permissions:
