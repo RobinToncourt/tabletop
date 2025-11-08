@@ -38,8 +38,8 @@ jobs:
               run: wasm-bindgen --no-typescript --out-dir ./out/ --target web ./target/wasm32-unknown-unknown/release/tabletop.wasm --out-name "tabletop"
             - name: wasm-strip
               run: wasm-strip ./out/tabletop_bg.wasm
-            - name: wasm-opt
-              run: wasm-opt -Oz --enable-bulk-memory --enable-nontrapping-float-to-int --enable-reference-types --enable-sign-ext -o ./out/tabletop_bg.wasm ./out/tabletop_bg.wasm
+            # - name: wasm-opt
+            #   run: wasm-opt -Oz --enable-bulk-memory --enable-nontrapping-float-to-int --enable-reference-types --enable-sign-ext -o ./out/tabletop_bg.wasm ./out/tabletop_bg.wasm
             # - name: gzip
               # run: gzip -f ./out/tabletop_bg.wasm
             - name: Copy
