@@ -43,7 +43,7 @@ jobs:
             # - name: gzip
               # run: gzip -f ./out/tabletop_bg.wasm
             - name: Copy
-              run: cp -R assets out/ && cp www/index.html out/index.html
+              run: cp -R assets out/ && cp www/index.html out/index.html && www/favicon.ico out/favicon.ico
 
             - name: Push
               uses: s0/git-publish-subdir-action@develop
