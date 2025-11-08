@@ -31,6 +31,7 @@ jobs:
                 version: 'latest'
             - name: Install wasm target
               run: rustup target install wasm32-unknown-unknown
+
             - name: Build
               run: cargo build --release --target wasm32-unknown-unknown
             - name: wasm-bindgen
@@ -39,10 +40,11 @@ jobs:
               run: wasm-strip ./out/tabletop_bg.wasm
             - name: wasm-opt
               run: wasm-opt -Oz --enable-bulk-memory --enable-nontrapping-float-to-int --enable-reference-types --enable-sign-ext -o ./out/tabletop_bg.wasm ./out/tabletop_bg.wasm
-            - name: gzip
-              run: gzip -f ./out/tabletop_bg.wasm
+            # - name: gzip
+              # run: gzip -f ./out/tabletop_bg.wasm
             - name: Copy
               run: cp -R assets out/ && cp www/index.html out/index.html
+
             - name: Push
               uses: s0/git-publish-subdir-action@develop
               env:
