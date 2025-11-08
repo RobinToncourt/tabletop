@@ -1,6 +1,6 @@
 //#![allow(dead_code, unused, unused_imports)]
 
-use bevy::{input::mouse::AccumulatedMouseScroll, prelude::*};
+use bevy::{asset::AssetMetaCheck, input::mouse::AccumulatedMouseScroll, prelude::*};
 
 const CARD_IMAGES: &[&str] = &[
     // ♠️ Spades
@@ -73,13 +73,21 @@ const SCROLL_FACTOR: f32 = 0.2;
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins.build().set(WindowPlugin {
-            primary_window: Some(Window {
-                fit_canvas_to_parent: true,
-                ..default()
-            }),
-            ..default()
-        }))
+        .add_plugins(
+            DefaultPlugins
+                .build()
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        fit_canvas_to_parent: true,
+                        ..default()
+                    }),
+                    ..default()
+                })
+                .set(AssetPlugin {
+                    meta_check: AssetMetaCheck::Never,
+                    ..default()
+                }),
+        )
         .add_systems(Startup, setup)
         .add_systems(Update, (zoom_in, move_camera))
         .run();
