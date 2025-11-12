@@ -65,11 +65,14 @@ const CARD_IMAGES: &[&str] = &[
 ];
 const CARD_SIZE: Vec2 = Vec2::new(500.0, 726.0);
 
-#[cfg(not(target_arch = "wasm32"))]
-const SCROLL_FACTOR: f32 = 10.0;
+const SCROLL_FACTOR: f32 = if cfg!(target_arch = "wasm32") {
+    0.2
+} else {
+    10.0
+};
 
-#[cfg(target_arch = "wasm32")]
-const SCROLL_FACTOR: f32 = 0.2;
+#[derive(Resource)]
+struct DoubleClickTimer(Timer);
 
 fn main() {
     App::new()
@@ -88,13 +91,14 @@ fn main() {
                     ..default()
                 }),
         )
+        .insert_resource(DoubleClickTimer(Timer::from_seconds(
+            0.5,
+            TimerMode::Repeating,
+        )))
         .add_systems(Startup, setup)
         .add_systems(Update, (zoom_in, move_camera))
         .run();
 }
-
-#[derive(Component)]
-struct Card;
 
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     let sprite_size = CARD_SIZE / 10.0;
@@ -125,20 +129,67 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         );
 
         commands
-            .spawn((sprite, Card, Pickable::default(), transform))
-            .observe(card_drag_start)
-            .observe(card_drag)
-            .observe(card_drag_end);
+            .spawn((sprite, Pickable::default(), transform))
+            .observe(mouse_action_start)
+            .observe(mouse_action)
+            .observe(mouse_action_end);
+    }
+
+    // Spanw card back.
+    let sprite_path = format!("card_back.png");
+    let sprite = Sprite {
+        image: asset_server.load(&sprite_path),
+        custom_size: Some(sprite_size),
+        ..default()
+    };
+    let transform = Transform::from_xyz(
+        start_x_offset + 2.0 * sprite_size.x,
+        start_y_offset - 4.0 * sprite_size.y,
+        0.0,
+    );
+
+    commands
+        .spawn((sprite, Pickable::default(), transform))
+        .observe(mouse_action_start)
+        .observe(mouse_action)
+        .observe(mouse_action_end);
+}
+
+fn mouse_action_start(
+    drag_start: On<Pointer<DragStart>>,
+    mut query: Query<&mut Transform>,
+    time: Res<Time>,
+    mut double_click_timer: ResMut<DoubleClickTimer>,
+) {
+    let button = drag_start.event().event.button;
+    if !matches!(button, PointerButton::Primary) {
+        return;
+    }
+
+    if double_click_timer.0.tick(time.delta()).just_finished() {
+        println!("double click");
+    }
+
+    if let Ok(mut transform) = query.get_mut(drag_start.event_target()) {
+        transform.translation.z += 100.0;
     }
 }
 
-fn card_drag_start(on_drag_start: On<Pointer<DragStart>>, mut query: Query<&mut GlobalZIndex>) {
-    if let Ok(mut global_zindex) = query.get_mut(on_drag_start.event_target()) {
-        global_zindex.0 += 100;
+fn mouse_action(
+    on_drag: On<Pointer<Drag>>,
+    query: Query<&mut Transform>,
+    camera: Single<(&Camera, &GlobalTransform)>,
+    windows: Query<&Window>,
+) {
+    let button = on_drag.event().event.button;
+    match button {
+        PointerButton::Primary => drag(on_drag, query, camera, windows),
+        PointerButton::Secondary => rotate(),
+        PointerButton::Middle => {}
     }
 }
 
-fn card_drag(
+fn drag(
     on_drag: On<Pointer<Drag>>,
     mut query: Query<&mut Transform>,
     camera: Single<(&Camera, &GlobalTransform)>,
@@ -162,9 +213,16 @@ fn card_drag(
     }
 }
 
-fn card_drag_end(on_drag_start: On<Pointer<DragEnd>>, mut query: Query<&mut GlobalZIndex>) {
-    if let Ok(mut global_zindex) = query.get_mut(on_drag_start.event_target()) {
-        global_zindex.0 -= 100;
+fn rotate() {}
+
+fn mouse_action_end(drag_end: On<Pointer<DragEnd>>, mut query: Query<&mut Transform>) {
+    let button = drag_end.event().event.button;
+    if !matches!(button, PointerButton::Primary) {
+        return;
+    }
+
+    if let Ok(mut transform) = query.get_mut(drag_end.event_target()) {
+        transform.translation.z -= 100.0;
     }
 }
 
@@ -185,7 +243,7 @@ fn zoom_in(
 
 fn move_camera(
     keyboard_input: Res<ButtonInput<KeyCode>>,
-    mut camera: Single<&mut Transform, (With<Camera2d>, Without<Card>)>,
+    mut camera: Single<&mut Transform, With<Camera2d>>,
 ) {
     let mut direction = Vec2::ZERO;
 
