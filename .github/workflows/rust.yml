@@ -33,6 +33,12 @@ jobs:
     #
     # Copy files and assets to out folder.
     #
+
+    echo-wd:
+        needs: actions-checkout
+        runs-on: ubuntu-latest
+        steps:
+            - run: echo $(pwd)
     
     copy-assets:
         needs: actions-checkout
