@@ -12,15 +12,15 @@ env:
     CARGO_TERM_COLOR: always
 
 jobs:
-    actions-checkout:
+    build:
         runs-on: ubuntu-latest
+        timeout-minutes: 30
         steps:
+            #
+            # Installs.
+            #
+
             - uses: actions/checkout@v3
-    
-    actions-cache:
-        needs: actions-checkout
-        runs-on: ubuntu-latest
-        steps:
             - uses: actions/cache@v3
               with:
                 path: |
@@ -30,131 +30,56 @@ jobs:
                     ~/.cargo/git/db/
                     target/
                 key: ${{ github.ref || github.run_id }}
-    
-    #
-    # Copy files and assets to out folder.
-    #
-    
-    copy-assets:
-        needs: actions-cache
-        runs-on: ubuntu-latest
-        steps:
-            - run: cp -R assets out/
-    
-    copy-index:
-        needs: copy-assets
-        runs-on: ubuntu-latest
-        steps:
-            - run: cp www/index.html out/index.html
-    
-    copy-favicon:
-        needs: copy-index
-        runs-on: ubuntu-latest
-        steps:
-            - run: cp www/favicon.ico out/favicon.ico
-    
-    #
-    # Install tools.
-    #
-    
-    update-linux:
-        runs-on: copy-favicon
-        steps:
-            - run: sudo apt-get update
-    
-    dtolnay-rust-toolchain:
-        runs-on: update-linux
-        steps:
             - uses: dtolnay/rust-toolchain@stable
-    
-    jetli-wasm-bindgen-action:
-        runs-on: dtolnay-rust-toolchain
-        steps:
+            - name: Install wabt and binaryen
+              run: sudo apt-get update; sudo apt-get install wabt; sudo apt install binaryen
             - uses: jetli/wasm-bindgen-action@v0.2.0
               with:
                 version: 'latest'
-    
-    install-wabt:
-        needs: jetli-wasm-bindgen-action
-        runs-on: ubuntu-latest
-        steps:
-            - run: sudo apt-get install wabt
-    
-    install-binaryen:
-        needs: install-wabt
-        runs-on: ubuntu-latest
-        steps:
-            - run: sudo apt-get install binaryen
+            - name: Install wasm target
+              run: rustup target install wasm32-unknown-unknown
 
-    install-wasm-target:
-        needs: install-binaryen
-        runs-on: ubuntu-latest
-        steps:
-            - run: rustup target install wasm32-unknown-unknown
-    
-    #
-    # Build chain.
-    #
-    
-    build:
-        needs: install-wasm-target
-        runs-on: ubuntu-latest
-        steps:
-            - run: cargo build --release --target wasm32-unknown-unknown
-    
-    wasm-bindgen:
-        needs: build
-        runs-on: ubuntu-latest
-        steps:
-            - run: wasm-bindgen --no-typescript --out-dir ./out/ --target web ./target/wasm32-unknown-unknown/release/tabletop.wasm --out-name "tabletop"
-    
-    wasm-strip:
-        needs: wasm-bindgen
-        runs-on: ubuntu-latest
-        steps:
-            - run: wasm-strip ./out/tabletop_bg.wasm
-    
-    # wasm-opt:
-        # needs: wasm-strip
-        # runs-on: ubuntu-latest
-        # steps:
-            # run: wasm-opt -Oz --enable-bulk-memory --enable-nontrapping-float-to-int --enable-reference-types --enable-sign-ext -o ./out/tabletop_bg.wasm ./out/tabletop_bg.wasm
-    
-    # gzip:
-        # needs: wasm-opt
-        # runs-on: ubuntu-latest
-        # steps:
-            # run: gzip -f ./out/tabletop_bg.wasm
-    
-    push:
-        needs: wasm-strip
-        runs-on: ubuntu-latest
-        steps:
-            - uses: s0/git-publish-subdir-action@develop
+            - name: Copy
+              run: cp -R assets out/ && cp www/index.html out/index.html && cp www/favicon.ico out/favicon.ico
+
+            #
+            # Build chain.
+            #
+
+            - name: Build
+              run: cargo build --release --target wasm32-unknown-unknown
+            - name: wasm-bindgen
+              run: wasm-bindgen --no-typescript --out-dir ./out/ --target web ./target/wasm32-unknown-unknown/release/tabletop.wasm --out-name "tabletop"
+            - name: wasm-strip
+              run: wasm-strip ./out/tabletop_bg.wasm
+            # - name: wasm-opt
+            #   run: wasm-opt -Oz --enable-bulk-memory --enable-nontrapping-float-to-int --enable-reference-types --enable-sign-ext -o ./out/tabletop_bg.wasm ./out/tabletop_bg.wasm
+            # - name: gzip
+              # run: gzip -f ./out/tabletop_bg.wasm
+
+            #
+            # Deploy.
+            #
+
+            - name: Push
+              uses: s0/git-publish-subdir-action@develop
               env:
                 SQUASH_HISTORY: true
                 REPO: self
-                BRANCH: gh-pages
-                FOLDER: out
-                GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-                MESSAGE: "Build: ({sha}) {msg}"
-    
-    setup-pages:
-        needs: push
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/configure-pages@v5
-    
-    upload-artifact:
-        needs: setup-pages
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/upload-pages-artifact@v4
+                BRANCH: gh-pages # The branch name where you want to push the assets
+                FOLDER: out # The directory where your assets are generated
+                GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GitHub will automatically add this - you don't need to bother getting a token
+                MESSAGE: "Build: ({sha}) {msg}" # The commit message
+
+            - name: Setup Pages
+              uses: actions/configure-pages@v5
+            - name: Upload artifact
+              uses: actions/upload-pages-artifact@v4
               with:
                 path: "./out"
 
     deploy:
-        needs: upload-artifact
+        needs: build
         runs-on: ubuntu-latest
 
         permissions:
