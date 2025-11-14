@@ -39,9 +39,6 @@ jobs:
             - name: Install wasm target
               run: rustup target install wasm32-unknown-unknown
 
-            - name: Copy
-              run: cp -R assets out/assets && cp www/index.html out/index.html && cp www/favicon.ico out/favicon.ico
-
             #
             # Build chain.
             #
@@ -56,6 +53,13 @@ jobs:
             #   run: wasm-opt -Oz --enable-bulk-memory --enable-nontrapping-float-to-int --enable-reference-types --enable-sign-ext -o ./out/tabletop_bg.wasm ./out/tabletop_bg.wasm
             # - name: gzip
               # run: gzip -f ./out/tabletop_bg.wasm
+
+            #
+            # Copy files and assets.
+            #
+
+            - name: Copy
+              run: cp -R assets out/ && cp www/index.html out/index.html && cp www/favicon.ico out/favicon.ico
 
             #
             # Deploy.
