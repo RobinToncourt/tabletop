@@ -39,6 +39,7 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - run: echo $(pwd)
+            - run: ls -la
     
     copy-assets:
         needs: actions-checkout
