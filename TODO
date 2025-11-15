@@ -13,3 +13,4 @@
     - Split into dedicated files and bundles.
 
 - BUG: Left and right clic at the same time makes the card disappeared.
+- BUG: The first time the card is move, the super-position is messed up.

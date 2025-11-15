@@ -272,9 +272,23 @@ fn mouse_action_start(drag_start: On<Pointer<DragStart>>, mut query: Query<&mut 
         return;
     }
 
-    if let Ok(mut transform) = query.get_mut(drag_start.event_target()) {
-        transform.translation.z += 100.0;
+    let mut max_z = {
+        let Ok(target_transform) = query.get_mut(drag_start.event_target()) else {
+            return;
+        };
+        target_transform.translation.z
+    };
+
+    for mut item in &mut query {
+        if item.translation.z > max_z {
+            if item.translation.z > max_z {
+                max_z = item.translation.z;
+            }
+            item.translation.z += 1.0;
+        }
     }
+
+    let _ = query.get_mut(drag_start.event_target()).map(|mut target_transform| target_transform.translation.z = max_z);
 }
 
 fn mouse_action(
