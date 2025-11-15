@@ -6,3 +6,10 @@
     - to change background color.
 - Double clic to turn card around.
 - Left clic to have sub-menu options.
+- Add touchscreen support
+- Keep card surper-position order.
+
+- Refactor code:
+    - Split into dedicated files and bundles.
+
+- BUG: Left and right clic at the same time makes the card disappeared.

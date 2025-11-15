@@ -71,13 +71,20 @@ const SCROLL_FACTOR: f32 = if cfg!(target_arch = "wasm32") {
     10.0
 };
 
-const CURSOR_POSITION_STR: &str = "Cursor position: ";
+const INSTRUCTIONS: &str = "ZQSD/arrows to move camera\nYou can zoom with the wheel\nLeft clic on card to move it arround\nRight to rotate it";
+const CURSOR_POSITION_STR: &str = "Cursor position: \nTo camera:";
+
+const LIGHT_COLOR: Color = Color::srgb(0.9, 0.9, 0.9);
+const DARK_COLOR: Color = Color::srgb(0.1, 0.1, 0.1);
 
 #[derive(Component)]
 struct Card;
 
-#[derive(Resource)]
-struct DoubleClickTimer(Timer);
+#[derive(Component)]
+struct CursorPos;
+
+#[derive(Component)]
+struct ChangeBackgroundButton;
 
 fn main() {
     App::new()
@@ -96,12 +103,17 @@ fn main() {
                     ..default()
                 }),
         )
-        .insert_resource(DoubleClickTimer(Timer::from_seconds(
-            0.5,
-            TimerMode::Repeating,
-        )))
+        .insert_resource(ClearColor(LIGHT_COLOR))
         .add_systems(Startup, setup)
-        .add_systems(Update, (zoom_in, move_camera, cursor_position))
+        .add_systems(
+            Update,
+            (
+                zoom_in,
+                move_camera,
+                cursor_position,
+                button_change_background,
+            ),
+        )
         .run();
 }
 
@@ -111,7 +123,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn(Camera2d);
 
     commands.spawn((
-        Text::new(CURSOR_POSITION_STR),
+        Text::new(INSTRUCTIONS),
         TextFont {
             font_size: 12.0,
             ..default()
@@ -123,6 +135,48 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
             left: px(5),
             ..default()
         },
+    ));
+    commands.spawn((
+        CursorPos,
+        Text::new(CURSOR_POSITION_STR),
+        TextFont {
+            font_size: 12.0,
+            ..default()
+        },
+        TextColor(Color::srgb(0.5, 0.5, 1.0)),
+        Node {
+            position_type: PositionType::Absolute,
+            bottom: px(5),
+            left: px(5),
+            ..default()
+        },
+    ));
+
+    commands.spawn((
+        Button,
+        ChangeBackgroundButton,
+        Node {
+            width: px(150),
+            height: px(65),
+            border: UiRect::all(px(5)),
+            position_type: PositionType::Absolute,
+            top: px(5),
+            right: px(5),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            ..default()
+        },
+        BorderColor::all(Color::WHITE),
+        BorderRadius::MAX,
+        BackgroundColor(Color::BLACK),
+        children![(
+            Text::new("Change\nbackground color"),
+            TextFont {
+                font_size: 12.0,
+                ..default()
+            },
+            TextColor(Color::srgb(0.5, 0.5, 1.0)),
+        )],
     ));
 
     let start_x_offset = -325.0;
@@ -145,7 +199,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         let transform = Transform::from_xyz(
             start_x_offset + x_pos * sprite_size.x,
             start_y_offset - y_pos * sprite_size.y,
-            0.0,
+            i as f32,
         );
 
         commands
@@ -165,7 +219,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     let transform = Transform::from_xyz(
         start_x_offset + 2.0 * sprite_size.x,
         start_y_offset - 4.0 * sprite_size.y,
-        0.0,
+        CARD_IMAGES.len() as f32,
     );
 
     commands
@@ -177,7 +231,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 
 /// Tracks the position of the cursor in the window.
 fn cursor_position(
-    mut display: Single<&mut Text>,
+    mut display: Single<&mut Text, With<CursorPos>>,
     window: Single<&Window>,
     camera: Single<(&Camera, &GlobalTransform)>,
 ) {
@@ -191,27 +245,31 @@ fn cursor_position(
     if let (Some(abs_pos), Some(rel_pos)) = (window.cursor_position(), rel_pos) {
         display.0 = format!(
             "{CURSOR_POSITION_STR}\nx: {}\ny: {}\nTo world: \nx: {}\ny: {}",
-            abs_pos.x,
-            abs_pos.y,
-            rel_pos.x,
-            rel_pos.y,
+            abs_pos.x, abs_pos.y, rel_pos.x, rel_pos.y,
         );
     }
 }
 
-fn mouse_action_start(
-    drag_start: On<Pointer<DragStart>>,
-    mut query: Query<&mut Transform>,
-    time: Res<Time>,
-    mut double_click_timer: ResMut<DoubleClickTimer>,
+fn button_change_background(
+    mut background_color: ResMut<ClearColor>,
+    interaction_query: Single<&Interaction, (With<ChangeBackgroundButton>, Changed<Interaction>)>,
 ) {
+    match **interaction_query {
+        Interaction::Pressed => {
+            if background_color.0 == LIGHT_COLOR {
+                background_color.0 = DARK_COLOR;
+            } else {
+                background_color.0 = LIGHT_COLOR;
+            }
+        }
+        _ => {}
+    }
+}
+
+fn mouse_action_start(drag_start: On<Pointer<DragStart>>, mut query: Query<&mut Transform>) {
     let button = drag_start.event().event.button;
     if !matches!(button, PointerButton::Primary) {
         return;
-    }
-
-    if double_click_timer.0.tick(time.delta()).just_finished() {
-        println!("double click");
     }
 
     if let Ok(mut transform) = query.get_mut(drag_start.event_target()) {
@@ -266,7 +324,9 @@ fn rotate(
         .map(|ray| ray.origin.truncate());
     let target_transform = query.get_mut(on_drag.event_target());
 
-    if let (Some(cursor_translation), Ok(mut target_transform)) = (cursor_translation, target_transform) {
+    if let (Some(cursor_translation), Ok(mut target_transform)) =
+        (cursor_translation, target_transform)
+    {
         let to_cursor = (cursor_translation - target_transform.translation.xy()).normalize();
         let rotate_to_cursor = Quat::from_rotation_arc(Vec3::Y, to_cursor.extend(0.0));
         target_transform.rotation = rotate_to_cursor;
