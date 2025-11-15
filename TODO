@@ -1,4 +1,8 @@
 - Peer-to-peer multiplayer with Matchbox.
 - Move world with left click on background.
-- Rotate world with right click on background.
 - Adjust camera movement base on zoom.
+- Change on_drag so it doesn't put mouse to center of object.
+- Add ui:
+    - to change background color.
+- Double clic to turn card around.
+- Left clic to have sub-menu options.

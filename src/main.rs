@@ -71,6 +71,11 @@ const SCROLL_FACTOR: f32 = if cfg!(target_arch = "wasm32") {
     10.0
 };
 
+const CURSOR_POSITION_STR: &str = "Cursor position: ";
+
+#[derive(Component)]
+struct Card;
+
 #[derive(Resource)]
 struct DoubleClickTimer(Timer);
 
@@ -96,7 +101,7 @@ fn main() {
             TimerMode::Repeating,
         )))
         .add_systems(Startup, setup)
-        .add_systems(Update, (zoom_in, move_camera))
+        .add_systems(Update, (zoom_in, move_camera, cursor_position))
         .run();
 }
 
@@ -104,6 +109,21 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     let sprite_size = CARD_SIZE / 10.0;
 
     commands.spawn(Camera2d);
+
+    commands.spawn((
+        Text::new(CURSOR_POSITION_STR),
+        TextFont {
+            font_size: 12.0,
+            ..default()
+        },
+        TextColor(Color::srgb(0.5, 0.5, 1.0)),
+        Node {
+            position_type: PositionType::Absolute,
+            top: px(5),
+            left: px(5),
+            ..default()
+        },
+    ));
 
     let start_x_offset = -325.0;
     let start_y_offset = 108.9;
@@ -129,7 +149,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         );
 
         commands
-            .spawn((sprite, Pickable::default(), transform))
+            .spawn((sprite, Pickable::default(), transform, Card))
             .observe(mouse_action_start)
             .observe(mouse_action)
             .observe(mouse_action_end);
@@ -149,10 +169,34 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     );
 
     commands
-        .spawn((sprite, Pickable::default(), transform))
+        .spawn((sprite, Pickable::default(), transform, Card))
         .observe(mouse_action_start)
         .observe(mouse_action)
         .observe(mouse_action_end);
+}
+
+/// Tracks the position of the cursor in the window.
+fn cursor_position(
+    mut display: Single<&mut Text>,
+    window: Single<&Window>,
+    camera: Single<(&Camera, &GlobalTransform)>,
+) {
+    let (camera, camera_transform) = *camera;
+
+    let rel_pos = window
+        .cursor_position()
+        .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor).ok())
+        .map(|ray| ray.origin.truncate());
+
+    if let (Some(abs_pos), Some(rel_pos)) = (window.cursor_position(), rel_pos) {
+        display.0 = format!(
+            "{CURSOR_POSITION_STR}\nx: {}\ny: {}\nTo world: \nx: {}\ny: {}",
+            abs_pos.x,
+            abs_pos.y,
+            rel_pos.x,
+            rel_pos.y,
+        );
+    }
 }
 
 fn mouse_action_start(
@@ -179,12 +223,12 @@ fn mouse_action(
     on_drag: On<Pointer<Drag>>,
     query: Query<&mut Transform>,
     camera: Single<(&Camera, &GlobalTransform)>,
-    windows: Query<&Window>,
+    window: Single<&Window>,
 ) {
     let button = on_drag.event().event.button;
     match button {
-        PointerButton::Primary => drag(on_drag, query, camera, windows),
-        PointerButton::Secondary => rotate(),
+        PointerButton::Primary => drag(on_drag, query, camera, window),
+        PointerButton::Secondary => rotate(on_drag, query, camera, window),
         PointerButton::Middle => {}
     }
 }
@@ -193,27 +237,41 @@ fn drag(
     on_drag: On<Pointer<Drag>>,
     mut query: Query<&mut Transform>,
     camera: Single<(&Camera, &GlobalTransform)>,
-    windows: Query<&Window>,
+    window: Single<&Window>,
 ) {
-    let Ok(window) = windows.single() else {
-        return;
-    };
-
     let (camera, camera_transform) = *camera;
 
-    let transform = query.get_mut(on_drag.event_target());
     let position = window
         .cursor_position()
         .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor).ok())
         .map(|ray| ray.origin.truncate());
+    let transform = query.get_mut(on_drag.event_target());
 
-    if let (Ok(mut transform), Some(position)) = (transform, position) {
+    if let (Some(position), Ok(mut transform)) = (position, transform) {
         transform.translation.x = position.x;
         transform.translation.y = position.y;
     }
 }
 
-fn rotate() {}
+fn rotate(
+    on_drag: On<Pointer<Drag>>,
+    mut query: Query<&mut Transform>,
+    camera: Single<(&Camera, &GlobalTransform)>,
+    window: Single<&Window>,
+) {
+    let (camera, camera_transform) = *camera;
+    let cursor_translation: Option<Vec2> = window
+        .cursor_position()
+        .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor).ok())
+        .map(|ray| ray.origin.truncate());
+    let target_transform = query.get_mut(on_drag.event_target());
+
+    if let (Some(cursor_translation), Ok(mut target_transform)) = (cursor_translation, target_transform) {
+        let to_cursor = (cursor_translation - target_transform.translation.xy()).normalize();
+        let rotate_to_cursor = Quat::from_rotation_arc(Vec3::Y, to_cursor.extend(0.0));
+        target_transform.rotation = rotate_to_cursor;
+    }
+}
 
 fn mouse_action_end(drag_end: On<Pointer<DragEnd>>, mut query: Query<&mut Transform>) {
     let button = drag_end.event().event.button;
