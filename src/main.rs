@@ -71,8 +71,9 @@ const SCROLL_FACTOR: f32 = if cfg!(target_arch = "wasm32") {
     10.0
 };
 
-const INSTRUCTIONS: &str = "ZQSD/arrows to move camera\nYou can zoom with the wheel\nLeft clic on card to move it arround\nRight to rotate it";
+const INSTRUCTIONS: &str = "ZQSD/arrows to move camera\nA and E to rotate camera\nYou can zoom with the wheel\nLeft clic on card to move it arround\nRight to rotate it";
 const CURSOR_POSITION_STR: &str = "Cursor position: \nTo camera:";
+const CAMERA_ROTATION_STR: &str = "Camera rotation:";
 
 const LIGHT_COLOR: Color = Color::srgb(0.9, 0.9, 0.9);
 const DARK_COLOR: Color = Color::srgb(0.1, 0.1, 0.1);
@@ -81,7 +82,16 @@ const DARK_COLOR: Color = Color::srgb(0.1, 0.1, 0.1);
 struct Card;
 
 #[derive(Component)]
-struct CursorPos;
+struct CursorPosText;
+
+#[derive(Component)]
+struct CameraRotationText;
+
+#[derive(Resource)]
+struct CameraRotationAngle(f32);
+
+#[derive(Resource)]
+struct DistanceCursorCenter(Option<Vec2>);
 
 #[derive(Component)]
 struct ChangeBackgroundButton;
@@ -103,7 +113,9 @@ fn main() {
                     ..default()
                 }),
         )
-        .insert_resource(ClearColor(LIGHT_COLOR))
+        .insert_resource(CameraRotationAngle(0.0))
+        .insert_resource(DistanceCursorCenter(None))
+        .insert_resource(ClearColor(DARK_COLOR))
         .add_systems(Startup, setup)
         .add_systems(
             Update,
@@ -111,6 +123,7 @@ fn main() {
                 zoom_in,
                 move_camera,
                 cursor_position,
+                camera_rotation,
                 button_change_background,
             ),
         )
@@ -137,7 +150,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         },
     ));
     commands.spawn((
-        CursorPos,
+        CursorPosText,
         Text::new(CURSOR_POSITION_STR),
         TextFont {
             font_size: 12.0,
@@ -148,6 +161,21 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
             position_type: PositionType::Absolute,
             bottom: px(5),
             left: px(5),
+            ..default()
+        },
+    ));
+    commands.spawn((
+        CameraRotationText,
+        Text::new(CAMERA_ROTATION_STR),
+        TextFont {
+            font_size: 12.0,
+            ..default()
+        },
+        TextColor(Color::srgb(0.5, 0.5, 1.0)),
+        Node {
+            position_type: PositionType::Absolute,
+            bottom: px(10),
+            right: px(10),
             ..default()
         },
     ));
@@ -231,7 +259,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 
 /// Tracks the position of the cursor in the window.
 fn cursor_position(
-    mut display: Single<&mut Text, With<CursorPos>>,
+    mut display: Single<&mut Text, With<CursorPosText>>,
     window: Single<&Window>,
     camera: Single<(&Camera, &GlobalTransform)>,
 ) {
@@ -244,10 +272,17 @@ fn cursor_position(
 
     if let (Some(abs_pos), Some(rel_pos)) = (window.cursor_position(), rel_pos) {
         display.0 = format!(
-            "{CURSOR_POSITION_STR}\nx: {}\ny: {}\nTo world: \nx: {}\ny: {}",
-            abs_pos.x, abs_pos.y, rel_pos.x, rel_pos.y,
+            "{CURSOR_POSITION_STR}\nx: {}\ny: {}\nTo world: \nx: {}\ny: {}\nCamera pos:\n{:#?}",
+            abs_pos.x, abs_pos.y, rel_pos.x, rel_pos.y, camera_transform.translation()
         );
     }
+}
+
+fn camera_rotation(
+    mut display: Single<&mut Text, With<CameraRotationText>>,
+    camera: Single<&Transform, With<Camera2d>>,
+) {
+    display.0 = format!("{CAMERA_ROTATION_STR}\n{:#?}", camera.rotation);
 }
 
 fn button_change_background(
@@ -266,16 +301,36 @@ fn button_change_background(
     }
 }
 
-fn mouse_action_start(drag_start: On<Pointer<DragStart>>, mut query: Query<&mut Transform>) {
+fn mouse_action_start(
+    drag_start: On<Pointer<DragStart>>,
+    mut query: Query<&mut Transform>,
+    camera: Single<(&Camera, &GlobalTransform)>,
+    window: Single<&Window>,
+    mut distance_cursor_center: ResMut<DistanceCursorCenter>,
+) {
     let button = drag_start.event().event.button;
     if !matches!(button, PointerButton::Primary) {
         return;
     }
 
+    let (camera, camera_transform) = *camera;
+
+    let position: Option<Vec2> = window
+        .cursor_position()
+        .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor).ok())
+        .map(|ray| ray.origin.truncate());
+
     let mut max_z = {
-        let Ok(target_transform) = query.get_mut(drag_start.event_target()) else {
+        let (Ok(target_transform), Some(position)) =
+            (query.get_mut(drag_start.event_target()), position)
+        else {
             return;
         };
+        //target_transform.translation.distance(position)
+        distance_cursor_center.0 = Some(Vec2 {
+            x: target_transform.translation.x - position.x,
+            y: target_transform.translation.y - position.y,
+        });
         target_transform.translation.z
     };
 
@@ -288,7 +343,9 @@ fn mouse_action_start(drag_start: On<Pointer<DragStart>>, mut query: Query<&mut 
         }
     }
 
-    let _ = query.get_mut(drag_start.event_target()).map(|mut target_transform| target_transform.translation.z = max_z);
+    let _ = query
+        .get_mut(drag_start.event_target())
+        .map(|mut target_transform| target_transform.translation.z = max_z);
 }
 
 fn mouse_action(
@@ -296,10 +353,11 @@ fn mouse_action(
     query: Query<&mut Transform>,
     camera: Single<(&Camera, &GlobalTransform)>,
     window: Single<&Window>,
+    distance_cursor_center: Res<DistanceCursorCenter>,
 ) {
     let button = on_drag.event().event.button;
     match button {
-        PointerButton::Primary => drag(on_drag, query, camera, window),
+        PointerButton::Primary => drag(on_drag, query, camera, window, distance_cursor_center),
         PointerButton::Secondary => rotate(on_drag, query, camera, window),
         PointerButton::Middle => {}
     }
@@ -310,18 +368,21 @@ fn drag(
     mut query: Query<&mut Transform>,
     camera: Single<(&Camera, &GlobalTransform)>,
     window: Single<&Window>,
+    distance_cursor_center: Res<DistanceCursorCenter>,
 ) {
     let (camera, camera_transform) = *camera;
 
-    let position = window
+    let position: Option<Vec2> = window
         .cursor_position()
         .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor).ok())
         .map(|ray| ray.origin.truncate());
     let transform = query.get_mut(on_drag.event_target());
 
+    let distance_cursor_center = distance_cursor_center.0.unwrap_or(Vec2::ZERO);
+
     if let (Some(position), Ok(mut transform)) = (position, transform) {
-        transform.translation.x = position.x;
-        transform.translation.y = position.y;
+        transform.translation.x = position.x + distance_cursor_center.x;
+        transform.translation.y = position.y + distance_cursor_center.y;
     }
 }
 
@@ -347,15 +408,12 @@ fn rotate(
     }
 }
 
-fn mouse_action_end(drag_end: On<Pointer<DragEnd>>, mut query: Query<&mut Transform>) {
-    let button = drag_end.event().event.button;
-    if !matches!(button, PointerButton::Primary) {
-        return;
-    }
-
-    if let Ok(mut transform) = query.get_mut(drag_end.event_target()) {
-        transform.translation.z -= 100.0;
-    }
+fn mouse_action_end(
+    _drag_end: On<Pointer<DragEnd>>,
+    _query: Query<&mut Transform>,
+    mut distance_cursor_center: ResMut<DistanceCursorCenter>,
+) {
+    distance_cursor_center.0 = None;
 }
 
 fn zoom_in(
@@ -376,6 +434,7 @@ fn zoom_in(
 fn move_camera(
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mut camera: Single<&mut Transform, With<Camera2d>>,
+    mut camera_rotation_angle: ResMut<CameraRotationAngle>,
 ) {
     let mut direction = Vec2::ZERO;
 
@@ -397,4 +456,69 @@ fn move_camera(
 
     camera.translation.x += direction.x;
     camera.translation.y += direction.y;
+
+    const ROTATION_SPEED: f32 = 4.5;
+
+    const HALF_PI: f32 = std::f32::consts::PI / 180.0;
+    const ANGLE: f32 = std::f32::consts::PI / 18.0;
+    const L: f32 = 100.0;
+
+    if keyboard_input.pressed(KeyCode::KeyQ) {
+        camera_rotation_angle.0 += ANGLE;
+        let angle: f32 = camera_rotation_angle.0;
+
+        let camera_pos = camera.translation;
+        let point = {
+            let mut tmp = camera_pos.clone();
+            tmp.x += 1.0;
+            tmp
+        };
+        let point_bis = {
+            let mut tmp = point.clone();
+            tmp.x = point.x * f32::cos(angle) - point.y * f32::sin(angle);
+            tmp.y = point.y * f32::cos(angle) + point.x * f32::sin(angle);
+            tmp
+        };
+        let rotate_to_point = Quat::from_rotation_arc(Vec3::X, point_bis);
+        camera.rotation = rotate_to_point;
+    }
+
+    if keyboard_input.pressed(KeyCode::KeyE) {
+        camera_rotation_angle.0 -= ANGLE;
+        let angle: f32 = camera_rotation_angle.0;
+
+        let camera_pos = camera.translation;
+        let point = {
+            let mut tmp = camera_pos.clone();
+            tmp.x += 1.0;
+            tmp
+        };
+        let point_bis = {
+            let mut tmp = point.clone();
+            tmp.x = point.x * f32::cos(angle) - point.y * f32::sin(angle);
+            tmp.y = point.y * f32::cos(angle) + point.x * f32::sin(angle);
+            tmp
+        };
+        let rotate_to_point = Quat::from_rotation_arc(Vec3::X, point_bis);
+        camera.rotation = rotate_to_point;
+    }
+
+    //*/
+
+    /*
+    let mut rotation: f32 = 0.0;
+
+    if keyboard_input.pressed(KeyCode::KeyQ) {
+        rotation += 0.001;
+    }
+
+    if keyboard_input.pressed(KeyCode::KeyE) {
+        rotation -= 0.001;
+    }
+
+    let mut end_rotation = camera.rotation.to_array().clone();
+    end_rotation[2] += rotation;
+
+    camera.rotation = camera.rotation.lerp(Quat::from_array(end_rotation), ROTATION_SPEED);
+    */
 }
