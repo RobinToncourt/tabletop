@@ -70,6 +70,7 @@ const SCROLL_FACTOR: f32 = if cfg!(target_arch = "wasm32") {
 } else {
     10.0
 };
+const ROTATION_ANGLE: f32 = std::f32::consts::PI / 18.0;
 
 const INSTRUCTIONS: &str = "ZQSD/arrows to move camera\nA and E to rotate camera\nYou can zoom with the wheel\nLeft clic on card to move it arround\nRight to rotate it";
 const CURSOR_POSITION_STR: &str = "Cursor position: \nTo camera:";
@@ -273,7 +274,11 @@ fn cursor_position(
     if let (Some(abs_pos), Some(rel_pos)) = (window.cursor_position(), rel_pos) {
         display.0 = format!(
             "{CURSOR_POSITION_STR}\nx: {}\ny: {}\nTo world: \nx: {}\ny: {}\nCamera pos:\n{:#?}",
-            abs_pos.x, abs_pos.y, rel_pos.x, rel_pos.y, camera_transform.translation()
+            abs_pos.x,
+            abs_pos.y,
+            rel_pos.x,
+            rel_pos.y,
+            camera_transform.translation()
         );
     }
 }
@@ -434,7 +439,7 @@ fn zoom_in(
 fn move_camera(
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mut camera: Single<&mut Transform, With<Camera2d>>,
-    mut camera_rotation_angle: ResMut<CameraRotationAngle>,
+    camera_rotation_angle: ResMut<CameraRotationAngle>,
 ) {
     let mut direction = Vec2::ZERO;
 
@@ -457,68 +462,26 @@ fn move_camera(
     camera.translation.x += direction.x;
     camera.translation.y += direction.y;
 
-    const ROTATION_SPEED: f32 = 4.5;
-
-    const HALF_PI: f32 = std::f32::consts::PI / 180.0;
-    const ANGLE: f32 = std::f32::consts::PI / 18.0;
-    const L: f32 = 100.0;
-
     if keyboard_input.pressed(KeyCode::KeyQ) {
-        camera_rotation_angle.0 += ANGLE;
-        let angle: f32 = camera_rotation_angle.0;
-
-        let camera_pos = camera.translation;
-        let point = {
-            let mut tmp = camera_pos.clone();
-            tmp.x += 1.0;
-            tmp
-        };
-        let point_bis = {
-            let mut tmp = point.clone();
-            tmp.x = point.x * f32::cos(angle) - point.y * f32::sin(angle);
-            tmp.y = point.y * f32::cos(angle) + point.x * f32::sin(angle);
-            tmp
-        };
-        let rotate_to_point = Quat::from_rotation_arc(Vec3::X, point_bis);
-        camera.rotation = rotate_to_point;
+        rotate_camera(camera, camera_rotation_angle, ROTATION_ANGLE);
+    } else if keyboard_input.pressed(KeyCode::KeyE) {
+        rotate_camera(camera, camera_rotation_angle, -ROTATION_ANGLE);
     }
+}
 
-    if keyboard_input.pressed(KeyCode::KeyE) {
-        camera_rotation_angle.0 -= ANGLE;
-        let angle: f32 = camera_rotation_angle.0;
+fn rotate_camera(
+    mut camera: Single<&mut Transform, With<Camera2d>>,
+    mut camera_rotation_angle: ResMut<CameraRotationAngle>,
+    rotation_angle: f32,
+) {
+    camera_rotation_angle.0 += rotation_angle;
+    let angle: f32 = camera_rotation_angle.0;
 
-        let camera_pos = camera.translation;
-        let point = {
-            let mut tmp = camera_pos.clone();
-            tmp.x += 1.0;
-            tmp
-        };
-        let point_bis = {
-            let mut tmp = point.clone();
-            tmp.x = point.x * f32::cos(angle) - point.y * f32::sin(angle);
-            tmp.y = point.y * f32::cos(angle) + point.x * f32::sin(angle);
-            tmp
-        };
-        let rotate_to_point = Quat::from_rotation_arc(Vec3::X, point_bis);
-        camera.rotation = rotate_to_point;
-    }
-
-    //*/
-
-    /*
-    let mut rotation: f32 = 0.0;
-
-    if keyboard_input.pressed(KeyCode::KeyQ) {
-        rotation += 0.001;
-    }
-
-    if keyboard_input.pressed(KeyCode::KeyE) {
-        rotation -= 0.001;
-    }
-
-    let mut end_rotation = camera.rotation.to_array().clone();
-    end_rotation[2] += rotation;
-
-    camera.rotation = camera.rotation.lerp(Quat::from_array(end_rotation), ROTATION_SPEED);
-    */
+    let point_bis = Vec3 {
+        x: f32::cos(angle),
+        y: f32::sin(angle),
+        z: 0.0,
+    };
+    let rotate_to_point = Quat::from_rotation_arc(Vec3::X, point_bis);
+    camera.rotation = rotate_to_point;
 }
