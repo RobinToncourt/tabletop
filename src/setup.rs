@@ -69,6 +69,9 @@ pub struct Card;
 #[derive(Resource)]
 struct DistanceCursorCenter(Option<Vec2>);
 
+#[derive(Resource)]
+struct ItemZTransformValue(f32);
+
 pub struct SetupPlugin;
 
 impl Plugin for SetupPlugin {
@@ -77,6 +80,7 @@ impl Plugin for SetupPlugin {
             .add_plugins(
                 DefaultPlugins
                     .build()
+                    // This is so the wasm window fit the browser page.
                     .set(WindowPlugin {
                         primary_window: Some(Window {
                             fit_canvas_to_parent: true,
@@ -84,19 +88,65 @@ impl Plugin for SetupPlugin {
                         }),
                         ..default()
                     })
+                    // This is so it doesn't try to fetch .meta files for assets.
                     .set(AssetPlugin {
                         meta_check: AssetMetaCheck::Never,
                         ..default()
                     }),
             )
+            .insert_resource(ItemZTransformValue(0.0))
             .add_systems(Startup, setup);
     }
 }
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let sprite_size = CARD_SIZE / 10.0;
-
+fn setup(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
+    z_transform: ResMut<ItemZTransformValue>,
+) {
     commands.spawn(Camera2d);
+
+    spawn_chess(commands, asset_server, atlas_layouts, z_transform);
+}
+
+fn spawn_chess(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
+    mut z_transform: ResMut<ItemZTransformValue>,
+) {
+    let chess_board = Sprite {
+        image: asset_server.load("chess_board.png"),
+        ..default()
+    };
+    let transform = Transform::from_xyz(0.0, 0.0, z_transform.0);
+    spawn_draggable(&mut commands, (chess_board, Pickable::default(), transform));
+    z_transform.0 += 1.0;
+
+    let pieces_texture = asset_server.load("ChessPiecesArray.png");
+    let texture_atlas = TextureAtlasLayout::from_grid(UVec2::splat(60), 6, 2, None, None);
+    let texture_atlas_handle = atlas_layouts.add(texture_atlas);
+
+    for i in [0, 1, 2, 2, 3, 3, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 6, 7, 8, 8, 9, 9, 10, 10, 11, 11, 11, 11, 11, 11, 11, 11] {
+        let piece = Sprite::from_atlas_image(
+            pieces_texture.clone(),
+            TextureAtlas {
+                layout: texture_atlas_handle.clone(),
+                index: i,
+            },
+        );
+        let transform = Transform::from_xyz(0.0, 0.0, z_transform.0);
+        spawn_draggable(
+            &mut commands,
+            (piece, Pickable::default(), transform),
+        );
+        z_transform.0 += 1.0;
+    }
+}
+
+fn spawn_cards(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let sprite_size = CARD_SIZE / 10.0;
 
     let start_x_offset = -325.0;
     let start_y_offset = 108.9;
@@ -143,6 +193,17 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 
     commands
         .spawn((sprite, Pickable::default(), transform, Card))
+        .observe(mouse_action_start)
+        .observe(mouse_action)
+        .observe(mouse_action_end);
+}
+
+fn spawn_draggable<T>(commands: &mut Commands, bundle: T)
+where
+    T: Bundle,
+{
+    commands
+        .spawn(bundle)
         .observe(mouse_action_start)
         .observe(mouse_action)
         .observe(mouse_action_end);

@@ -66,19 +66,20 @@ fn debug_cursor_position(
 
     if let (Some(abs_pos), Some(rel_pos)) = (window.cursor_position(), rel_pos) {
         display.0 = format!(
-            "{CURSOR_POSITION_STR}\nx: {}\ny: {}\nTo world: \nx: {}\ny: {}\nCamera pos:\n{:#?}",
-            abs_pos.x,
-            abs_pos.y,
-            rel_pos.x,
-            rel_pos.y,
-            camera_transform.translation()
+            "{CURSOR_POSITION_STR}\nx: {}\ny: {}\nTo world: \nx: {}\ny: {}",
+            abs_pos.x, abs_pos.y, rel_pos.x, rel_pos.y,
         );
     }
 }
 
 fn debug_camera_rotation(
     mut display: Single<&mut Text, With<CameraRotationDebug>>,
-    camera: Single<&Transform, With<Camera2d>>,
+    camera: Single<(&Transform, &GlobalTransform), With<Camera2d>>,
 ) {
-    display.0 = format!("{CAMERA_ROTATION_STR}\n{:#?}", camera.rotation);
+    let (camera, camera_transform) = *camera;
+    display.0 = format!(
+        "Camera pos:\n{:#?}\n{CAMERA_ROTATION_STR}\n{:#?}",
+        camera_transform.translation(),
+        camera.rotation
+    );
 }
