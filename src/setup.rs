@@ -107,7 +107,7 @@ fn setup(
 ) {
     commands.spawn(Camera2d);
 
-    spawn_chess(commands, asset_server, atlas_layouts, z_transform);
+    spawn_cards(commands, asset_server);
 }
 
 fn spawn_chess(

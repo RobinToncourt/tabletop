@@ -8,7 +8,7 @@ const SCROLL_FACTOR: f32 = if cfg!(target_arch = "wasm32") {
 } else {
     10.0
 };
-const ROTATION_ANGLE: f32 = std::f32::consts::PI / 18.0;
+const ROTATION_ANGLE: f32 = std::f32::consts::PI / 32.0;
 
 #[derive(Resource)]
 pub struct CameraRotationAngle(pub f32);
