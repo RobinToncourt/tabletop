@@ -17,19 +17,25 @@ pub struct CameraPlugin;
 
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(CameraRotationAngle(0.0)).add_systems(
-            Update,
-            (
-                zoom_in.run_if(has_wheel_moved),
-                move_camera::<1, 0>.run_if(input_pressed(KeyCode::KeyD)),
-                move_camera::<-1, 0>.run_if(input_pressed(KeyCode::KeyA)),
-                move_camera::<0, 1>.run_if(input_pressed(KeyCode::KeyW)),
-                move_camera::<0, -1>.run_if(input_pressed(KeyCode::KeyS)),
-                rotate_camera_left.run_if(input_pressed(KeyCode::KeyQ)),
-                rotate_camera_right.run_if(input_pressed(KeyCode::KeyE)),
-            ),
-        );
+        app.insert_resource(CameraRotationAngle(0.0))
+            .add_systems(Startup, camera_setup)
+            .add_systems(
+                Update,
+                (
+                    zoom_in.run_if(has_wheel_moved),
+                    move_camera::<1, 0>.run_if(input_pressed(KeyCode::KeyD)),
+                    move_camera::<-1, 0>.run_if(input_pressed(KeyCode::KeyA)),
+                    move_camera::<0, 1>.run_if(input_pressed(KeyCode::KeyW)),
+                    move_camera::<0, -1>.run_if(input_pressed(KeyCode::KeyS)),
+                    rotate_camera_left.run_if(input_pressed(KeyCode::KeyQ)),
+                    rotate_camera_right.run_if(input_pressed(KeyCode::KeyE)),
+                ),
+            );
     }
+}
+
+fn camera_setup(mut commands: Commands) {
+    commands.spawn(Camera2d);
 }
 
 fn has_wheel_moved(mouse_wheel_input: Res<AccumulatedMouseScroll>) -> bool {
@@ -76,13 +82,5 @@ fn rotate_camera(
     rotation_angle: f32,
 ) {
     camera_rotation_angle.0 += rotation_angle;
-    let angle: f32 = camera_rotation_angle.0;
-
-    let point_bis = Vec3 {
-        x: f32::cos(angle),
-        y: f32::sin(angle),
-        z: 0.0,
-    };
-    let rotate_to_point = Quat::from_rotation_arc(Vec3::X, point_bis);
-    camera.rotation = rotate_to_point;
+    camera.rotation = Quat::from_rotation_z(camera_rotation_angle.0);
 }

@@ -105,8 +105,7 @@ fn setup(
     atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
     z_transform: ResMut<ItemZTransformValue>,
 ) {
-    commands.spawn(Camera2d);
-
+    // spawn_chess(commands, asset_server, atlas_layouts, z_transform);
     spawn_cards(commands, asset_server);
 }
 
@@ -121,26 +120,79 @@ fn spawn_chess(
         ..default()
     };
     let transform = Transform::from_xyz(0.0, 0.0, z_transform.0);
-    spawn_draggable(&mut commands, (chess_board, Pickable::default(), transform));
+    commands.spawn((chess_board, transform));
     z_transform.0 += 1.0;
 
     let pieces_texture = asset_server.load("ChessPiecesArray.png");
     let texture_atlas = TextureAtlasLayout::from_grid(UVec2::splat(60), 6, 2, None, None);
     let texture_atlas_handle = atlas_layouts.add(texture_atlas);
 
-    for i in [0, 1, 2, 2, 3, 3, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 6, 7, 8, 8, 9, 9, 10, 10, 11, 11, 11, 11, 11, 11, 11, 11] {
+    let chess_board_size = (637.0 / 2.0, 636.0 / 2.0);
+
+    const BLACK_BACKLANE: f32 = 0.8;
+    const BLACK_FRONTLANE: f32 = 0.58;
+    const WHITE_BACKLANE: f32 = -0.8;
+    const WHITE_FRONTLANE: f32 = -0.58;
+
+    const COL_A: f32 = -0.8;
+    const COL_B: f32 = -0.6;
+    const COL_C: f32 = -0.35;
+    const COL_D: f32 = -0.13;
+
+    const COL_E: f32 = 0.13;
+    const COL_F: f32 = 0.35;
+    const COL_G: f32 = 0.6;
+    const COL_H: f32 = 0.8;
+
+    let pieces_pos: &[(usize, f32, f32)] = &[
+        (0, COL_E, BLACK_BACKLANE),
+        (1, COL_D, BLACK_BACKLANE),
+        (2, COL_A, BLACK_BACKLANE),
+        (2, COL_H, BLACK_BACKLANE),
+        (3, COL_B, BLACK_BACKLANE),
+        (3, COL_G, BLACK_BACKLANE),
+        (4, COL_C, BLACK_BACKLANE),
+        (4, COL_F, BLACK_BACKLANE),
+        (5, COL_A, BLACK_FRONTLANE),
+        (5, COL_B, BLACK_FRONTLANE),
+        (5, COL_C, BLACK_FRONTLANE),
+        (5, COL_D, BLACK_FRONTLANE),
+        (5, COL_E, BLACK_FRONTLANE),
+        (5, COL_F, BLACK_FRONTLANE),
+        (5, COL_G, BLACK_FRONTLANE),
+        (5, COL_H, BLACK_FRONTLANE),
+        (6, COL_E, WHITE_BACKLANE),
+        (7, COL_D, WHITE_BACKLANE),
+        (8, COL_A, WHITE_BACKLANE),
+        (8, COL_H, WHITE_BACKLANE),
+        (9, COL_B, WHITE_BACKLANE),
+        (9, COL_G, WHITE_BACKLANE),
+        (10, COL_C, WHITE_BACKLANE),
+        (10, COL_F, WHITE_BACKLANE),
+        (11, COL_A, WHITE_FRONTLANE),
+        (11, COL_B, WHITE_FRONTLANE),
+        (11, COL_C, WHITE_FRONTLANE),
+        (11, COL_D, WHITE_FRONTLANE),
+        (11, COL_E, WHITE_FRONTLANE),
+        (11, COL_F, WHITE_FRONTLANE),
+        (11, COL_G, WHITE_FRONTLANE),
+        (11, COL_H, WHITE_FRONTLANE),
+    ];
+
+    for (z, x, y) in pieces_pos {
         let piece = Sprite::from_atlas_image(
             pieces_texture.clone(),
             TextureAtlas {
                 layout: texture_atlas_handle.clone(),
-                index: i,
+                index: *z,
             },
         );
-        let transform = Transform::from_xyz(0.0, 0.0, z_transform.0);
-        spawn_draggable(
-            &mut commands,
-            (piece, Pickable::default(), transform),
+        let transform = Transform::from_xyz(
+            *x * chess_board_size.0,
+            *y * chess_board_size.1,
+            z_transform.0,
         );
+        spawn_draggable(&mut commands, (piece, Pickable::default(), transform));
         z_transform.0 += 1.0;
     }
 }
@@ -216,6 +268,8 @@ fn mouse_action_start(
     window: Single<&Window>,
     mut distance_cursor_center: ResMut<DistanceCursorCenter>,
 ) {
+    println!("mouse_action_start _ On<Pointer<DragStart>>");
+
     let button = drag_start.event().event.button;
     if !matches!(button, PointerButton::Primary) {
         return;
