@@ -27,10 +27,10 @@ impl Plugin for CameraPlugin {
                 Update,
                 (
                     zoom_in.run_if(has_wheel_moved),
-                    move_camera::<1, 0>.run_if(input_pressed(KeyCode::KeyD)),
-                    move_camera::<-1, 0>.run_if(input_pressed(KeyCode::KeyA)),
-                    move_camera::<0, 1>.run_if(input_pressed(KeyCode::KeyW)),
-                    move_camera::<0, -1>.run_if(input_pressed(KeyCode::KeyS)),
+                    move_camera_up.run_if(input_pressed(KeyCode::KeyW)),
+                    move_camera_down.run_if(input_pressed(KeyCode::KeyS)),
+                    move_camera_right.run_if(input_pressed(KeyCode::KeyD)),
+                    move_camera_left.run_if(input_pressed(KeyCode::KeyA)),
                     rotate_camera_left.run_if(input_pressed(KeyCode::KeyQ)),
                     rotate_camera_right.run_if(input_pressed(KeyCode::KeyE)),
                 ),
@@ -64,12 +64,44 @@ fn zoom_in(
     }
 }
 
-fn move_camera<const X: i32, const Y: i32>(
-    mut camera: Single<&mut Transform, With<Camera2d>>,
+fn move_camera_up(
+    camera: Single<&mut Transform, With<Camera2d>>,
     zoom_level: Res<ZoomLevel>,
 ) {
-    camera.translation.x += zoom_level.0 * X as f32;
-    camera.translation.y += zoom_level.0 * Y as f32;
+    let forward = camera.rotation * Vec3::Y;
+    move_camera(camera, forward, zoom_level);
+}
+
+fn move_camera_down(
+    camera: Single<&mut Transform, With<Camera2d>>,
+    zoom_level: Res<ZoomLevel>,
+) {
+    let forward = camera.rotation * Vec3::Y;
+    move_camera(camera, -forward, zoom_level);
+}
+
+fn move_camera_right(
+    camera: Single<&mut Transform, With<Camera2d>>,
+    zoom_level: Res<ZoomLevel>,
+) {
+    let right = camera.rotation * Vec3::X;
+    move_camera(camera, right, zoom_level);
+}
+
+fn move_camera_left(
+    camera: Single<&mut Transform, With<Camera2d>>,
+    zoom_level: Res<ZoomLevel>,
+) {
+    let right = camera.rotation * Vec3::X;
+    move_camera(camera, -right, zoom_level);
+}
+
+fn move_camera(
+    mut camera: Single<&mut Transform, With<Camera2d>>,
+    movement: Vec3,
+    zoom_level: Res<ZoomLevel>,
+) {
+    camera.translation += movement * zoom_level.0;
 }
 
 fn rotate_camera_left(
