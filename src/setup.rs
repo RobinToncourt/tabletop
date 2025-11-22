@@ -64,64 +64,71 @@ const CARD_IMAGES: &[&str] = &[
 const CARD_SIZE: Vec2 = Vec2::new(500.0, 726.0);
 
 #[derive(Component)]
-pub struct Card;
+struct Card;
+
+#[derive(Component)]
+pub struct Selected;
+
+#[derive(Component)]
+struct CursorDistance(Vec2);
 
 #[derive(Resource)]
-struct DistanceCursorCenter(Option<Vec2>);
+struct LastItemZTransformValue(f32);
 
-#[derive(Resource)]
-struct ItemZTransformValue(f32);
+fn get_then_increase(z: &mut LastItemZTransformValue) -> f32 {
+    let tmp = z.0;
+    z.0 += 1.0;
+    tmp
+}
 
 pub struct SetupPlugin;
-
 impl Plugin for SetupPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(DistanceCursorCenter(None))
-            .add_plugins(
-                DefaultPlugins
-                    .build()
-                    // This is so the wasm window fit the browser page.
-                    .set(WindowPlugin {
-                        primary_window: Some(Window {
-                            fit_canvas_to_parent: true,
-                            ..default()
-                        }),
-                        ..default()
-                    })
-                    // This is so it doesn't try to fetch .meta files for assets.
-                    .set(AssetPlugin {
-                        meta_check: AssetMetaCheck::Never,
+        app.add_plugins(
+            DefaultPlugins
+                .build()
+                // This is so the wasm window fit the browser page.
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        fit_canvas_to_parent: true,
                         ..default()
                     }),
-            )
-            .insert_resource(ItemZTransformValue(0.0))
-            .add_systems(Startup, setup);
+                    ..default()
+                })
+                // This is so it doesn't try to fetch .meta files for assets.
+                .set(AssetPlugin {
+                    meta_check: AssetMetaCheck::Never,
+                    ..default()
+                }),
+        )
+        .add_plugins(MeshPickingPlugin)
+        .insert_resource(LastItemZTransformValue(0.0))
+        .add_systems(Startup, setup);
     }
 }
 
 fn setup(
-    mut commands: Commands,
+    commands: Commands,
     asset_server: Res<AssetServer>,
     atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
-    z_transform: ResMut<ItemZTransformValue>,
+    z_transform: ResMut<LastItemZTransformValue>,
 ) {
     // spawn_chess(commands, asset_server, atlas_layouts, z_transform);
-    spawn_cards(commands, asset_server);
+    spawn_cards(commands, asset_server, z_transform);
 }
 
 fn spawn_chess(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
-    mut z_transform: ResMut<ItemZTransformValue>,
+    mut z_transform: ResMut<LastItemZTransformValue>,
 ) {
     let chess_board = Sprite {
         image: asset_server.load("chess_board.png"),
         ..default()
     };
-    let transform = Transform::from_xyz(0.0, 0.0, z_transform.0);
+    let transform = Transform::from_xyz(0.0, 0.0, get_then_increase(&mut z_transform));
     commands.spawn((chess_board, transform));
-    z_transform.0 += 1.0;
 
     let pieces_texture = asset_server.load("ChessPiecesArray.png");
     let texture_atlas = TextureAtlasLayout::from_grid(UVec2::splat(60), 6, 2, None, None);
@@ -190,14 +197,17 @@ fn spawn_chess(
         let transform = Transform::from_xyz(
             *x * chess_board_size.0,
             *y * chess_board_size.1,
-            z_transform.0,
+            get_then_increase(&mut z_transform),
         );
         spawn_draggable(&mut commands, (piece, Pickable::default(), transform));
-        z_transform.0 += 1.0;
     }
 }
 
-fn spawn_cards(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn spawn_cards(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut z_transform: ResMut<LastItemZTransformValue>,
+) {
     let sprite_size = CARD_SIZE / 10.0;
 
     let start_x_offset = -325.0;
@@ -220,14 +230,13 @@ fn spawn_cards(mut commands: Commands, asset_server: Res<AssetServer>) {
         let transform = Transform::from_xyz(
             start_x_offset + x_pos * sprite_size.x,
             start_y_offset - y_pos * sprite_size.y,
-            i as f32,
+            get_then_increase(&mut z_transform),
         );
 
-        commands
-            .spawn((sprite, Pickable::default(), transform, Card))
-            .observe(mouse_action_start)
-            .observe(mouse_action)
-            .observe(mouse_action_end);
+        spawn_draggable(
+            &mut commands,
+            (sprite, Pickable::default(), transform, Card),
+        );
     }
 
     // Spanw card back.
@@ -240,14 +249,13 @@ fn spawn_cards(mut commands: Commands, asset_server: Res<AssetServer>) {
     let transform = Transform::from_xyz(
         start_x_offset + 2.0 * sprite_size.x,
         start_y_offset - 4.0 * sprite_size.y,
-        CARD_IMAGES.len() as f32,
+        get_then_increase(&mut z_transform),
     );
 
-    commands
-        .spawn((sprite, Pickable::default(), transform, Card))
-        .observe(mouse_action_start)
-        .observe(mouse_action)
-        .observe(mouse_action_end);
+    spawn_draggable(
+        &mut commands,
+        (sprite, Pickable::default(), transform, Card),
+    );
 }
 
 fn spawn_draggable<T>(commands: &mut Commands, bundle: T)
@@ -256,103 +264,111 @@ where
 {
     commands
         .spawn(bundle)
-        .observe(mouse_action_start)
-        .observe(mouse_action)
-        .observe(mouse_action_end);
+        .observe(mouse_drag_start)
+        .observe(mouse_drag)
+        .observe(mouse_drag_end)
+        .observe(mouse_press);
 }
 
-fn mouse_action_start(
+/// Called on click on an item.
+fn mouse_press(
+    press: On<Pointer<Press>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut commands: Commands,
+    mut all_selected: Query<Entity, With<Selected>>,
+) {
+    let button = press.event().event.button;
+    if !matches!(button, PointerButton::Primary) {
+        return;
+    }
+
+    let clicked_entity = press.event_target();
+
+    if keyboard.pressed(KeyCode::ControlLeft) {
+        if all_selected.get_mut(clicked_entity).is_ok() {
+            commands.entity(clicked_entity).remove::<Selected>();
+        } else {
+            commands.entity(clicked_entity).insert(Selected);
+        }
+    } else {
+        for entity in all_selected {
+            commands.entity(entity).remove::<Selected>();
+        }
+        commands.entity(clicked_entity).insert(Selected);
+    }
+}
+
+fn mouse_drag_start(
     drag_start: On<Pointer<DragStart>>,
-    mut query: Query<&mut Transform>,
     camera: Single<(&Camera, &GlobalTransform)>,
     window: Single<&Window>,
-    mut distance_cursor_center: ResMut<DistanceCursorCenter>,
+    all_selected: Query<(Entity, &Transform), With<Selected>>,
+    mut commands: Commands,
 ) {
-    println!("mouse_action_start _ On<Pointer<DragStart>>");
-
     let button = drag_start.event().event.button;
     if !matches!(button, PointerButton::Primary) {
         return;
     }
 
     let (camera, camera_transform) = *camera;
-
-    let position: Option<Vec2> = window
+    let cursor_position_in_world: Option<Vec2> = window
         .cursor_position()
         .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor).ok())
         .map(|ray| ray.origin.truncate());
-
-    let mut max_z = {
-        let (Ok(target_transform), Some(position)) =
-            (query.get_mut(drag_start.event_target()), position)
-        else {
-            return;
-        };
-        //target_transform.translation.distance(position)
-        distance_cursor_center.0 = Some(Vec2 {
-            x: target_transform.translation.x - position.x,
-            y: target_transform.translation.y - position.y,
-        });
-        target_transform.translation.z
+    let Some(cursor_position_in_world) = cursor_position_in_world else {
+        return;
     };
 
-    for mut item in &mut query {
-        if item.translation.z > max_z {
-            if item.translation.z > max_z {
-                max_z = item.translation.z;
-            }
-            item.translation.z += 1.0;
-        }
+    for (entity, transform) in all_selected {
+        let cursor_distance = CursorDistance(Vec2 {
+            x: transform.translation.x - cursor_position_in_world.x,
+            y: transform.translation.y - cursor_position_in_world.y,
+        });
+        commands.entity(entity).insert(cursor_distance);
     }
-
-    let _ = query
-        .get_mut(drag_start.event_target())
-        .map(|mut target_transform| target_transform.translation.z = max_z);
 }
 
-fn mouse_action(
+fn mouse_drag(
     on_drag: On<Pointer<Drag>>,
-    query: Query<&mut Transform>,
     camera: Single<(&Camera, &GlobalTransform)>,
     window: Single<&Window>,
-    distance_cursor_center: Res<DistanceCursorCenter>,
+    all_selected: Query<(&mut Transform, &CursorDistance), With<Selected>>,
+    // query: Query<&mut Transform>,
 ) {
     let button = on_drag.event().event.button;
     match button {
-        PointerButton::Primary => drag(on_drag, query, camera, window, distance_cursor_center),
-        PointerButton::Secondary => rotate_item(on_drag, query, camera, window),
+        PointerButton::Primary => drag(camera, window, all_selected),
+        PointerButton::Secondary => {}
+        //rotate_item(on_drag, camera, window, query),
         PointerButton::Middle => {}
     }
 }
 
 fn drag(
-    on_drag: On<Pointer<Drag>>,
-    mut query: Query<&mut Transform>,
     camera: Single<(&Camera, &GlobalTransform)>,
     window: Single<&Window>,
-    distance_cursor_center: Res<DistanceCursorCenter>,
+    all_selected: Query<(&mut Transform, &CursorDistance), With<Selected>>,
 ) {
     let (camera, camera_transform) = *camera;
-
-    let position: Option<Vec2> = window
+    let cursor_position_in_world: Option<Vec2> = window
         .cursor_position()
         .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor).ok())
         .map(|ray| ray.origin.truncate());
-    let transform = query.get_mut(on_drag.event_target());
+    let Some(cursor_position_in_world) = cursor_position_in_world else {
+        return;
+    };
 
-    let distance_cursor_center = distance_cursor_center.0.unwrap_or(Vec2::ZERO);
-
-    if let (Some(position), Ok(mut transform)) = (position, transform) {
-        transform.translation.x = position.x + distance_cursor_center.x;
-        transform.translation.y = position.y + distance_cursor_center.y;
+    for (mut transform, cursor_distance) in all_selected {
+        transform.translation.x = cursor_position_in_world.x + cursor_distance.0.x;
+        transform.translation.y = cursor_position_in_world.y + cursor_distance.0.y;
     }
 }
 
 fn rotate_item(
     on_drag: On<Pointer<Drag>>,
-    mut query: Query<&mut Transform>,
     camera: Single<(&Camera, &GlobalTransform)>,
     window: Single<&Window>,
+    mut query: Query<&mut Transform>,
 ) {
     let (camera, camera_transform) = *camera;
     let cursor_translation: Option<Vec2> = window
@@ -370,9 +386,12 @@ fn rotate_item(
     }
 }
 
-fn mouse_action_end(
+fn mouse_drag_end(
     _drag_end: On<Pointer<DragEnd>>,
-    mut distance_cursor_center: ResMut<DistanceCursorCenter>,
+    all_cursor_distance: Query<Entity, With<CursorDistance>>,
+    mut commands: Commands,
 ) {
-    distance_cursor_center.0 = None;
+    for entity in all_cursor_distance {
+        commands.entity(entity).remove::<CursorDistance>();
+    }
 }

@@ -8,13 +8,12 @@ const SCROLL_FACTOR: f32 = if cfg!(target_arch = "wasm32") {
 } else {
     10.0
 };
-const ROTATION_ANGLE: f32 = std::f32::consts::PI / 32.0;
+const ROTATION_FACTOR: f32 = std::f32::consts::PI / 32.0;
 
 #[derive(Resource)]
 pub struct CameraRotationAngle(pub f32);
 
 pub struct CameraPlugin;
-
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(CameraRotationAngle(0.0))
@@ -66,14 +65,14 @@ fn rotate_camera_left(
     camera: Single<&mut Transform, With<Camera2d>>,
     camera_rotation_angle: ResMut<CameraRotationAngle>,
 ) {
-    rotate_camera(camera, camera_rotation_angle, ROTATION_ANGLE);
+    rotate_camera(camera, camera_rotation_angle, ROTATION_FACTOR);
 }
 
 fn rotate_camera_right(
     camera: Single<&mut Transform, With<Camera2d>>,
     camera_rotation_angle: ResMut<CameraRotationAngle>,
 ) {
-    rotate_camera(camera, camera_rotation_angle, -ROTATION_ANGLE);
+    rotate_camera(camera, camera_rotation_angle, -ROTATION_FACTOR);
 }
 
 fn rotate_camera(

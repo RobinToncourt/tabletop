@@ -9,16 +9,16 @@ const DARK_COLOR: Color = Color::srgb(0.1, 0.1, 0.1);
 struct ChangeBackgroundButton;
 
 pub struct UiPlugin;
-
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(ClearColor(DARK_COLOR))
+        app.insert_resource(ClearColor(LIGHT_COLOR))
             .add_systems(Startup, spawn_ui)
             .add_systems(Update, button_change_background);
     }
 }
 
 fn spawn_ui(mut commands: Commands) {
+    // Spawn instrctions text, top left.
     commands.spawn((
         Text::new(INSTRUCTIONS),
         TextFont {
@@ -34,6 +34,7 @@ fn spawn_ui(mut commands: Commands) {
         },
     ));
 
+    // Spawn button to change background color, top right.
     commands.spawn((
         Button,
         ChangeBackgroundButton,
@@ -62,6 +63,7 @@ fn spawn_ui(mut commands: Commands) {
     ));
 }
 
+/// Inverse the background color on `ChangeBackgroundButton` button click.
 fn button_change_background(
     mut background_color: ResMut<ClearColor>,
     interaction_query: Single<&Interaction, (With<ChangeBackgroundButton>, Changed<Interaction>)>,

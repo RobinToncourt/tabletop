@@ -1,5 +1,3 @@
-//#![allow(dead_code, unused, unused_imports)]
-
 mod camera;
 mod debug;
 mod setup;

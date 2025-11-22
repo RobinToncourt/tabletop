@@ -1,7 +1,10 @@
 use bevy::prelude::*;
 
+use crate::setup::Selected;
+
 const CURSOR_POSITION_STR: &str = "Cursor position: \nTo camera:";
 const CAMERA_ROTATION_STR: &str = "Camera rotation:";
+const ENTITY_WITH_SELECTED_STR: &str = "Entity with selected: ";
 
 #[derive(Component)]
 struct CursorPosDebug;
@@ -9,12 +12,20 @@ struct CursorPosDebug;
 #[derive(Component)]
 struct CameraRotationDebug;
 
-pub struct DebugPlugin;
+#[derive(Component)]
+struct EntityWithSelectedDebug;
 
+pub struct DebugPlugin;
 impl Plugin for DebugPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_debug_tools)
-            .add_systems(Update, (debug_cursor_position, debug_camera_rotation));
+        app.add_systems(Startup, spawn_debug_tools).add_systems(
+            Update,
+            (
+                debug_cursor_position,
+                debug_camera_rotation,
+                debug_nb_selected,
+            ),
+        );
     }
 }
 
@@ -49,6 +60,21 @@ fn spawn_debug_tools(mut commands: Commands) {
             ..default()
         },
     ));
+    commands.spawn((
+        EntityWithSelectedDebug,
+        Text::new(ENTITY_WITH_SELECTED_STR),
+        TextFont {
+            font_size: 12.0,
+            ..default()
+        },
+        TextColor(Color::srgb(0.5, 0.5, 1.0)),
+        Node {
+            position_type: PositionType::Absolute,
+            top: px(300),
+            left: px(10),
+            ..default()
+        },
+    ));
 }
 
 /// Tracks the position of the cursor in the window.
@@ -72,6 +98,7 @@ fn debug_cursor_position(
     }
 }
 
+/// Show the quaternion of the camera.
 fn debug_camera_rotation(
     mut display: Single<&mut Text, With<CameraRotationDebug>>,
     camera: Single<(&Transform, &GlobalTransform), With<Camera2d>>,
@@ -82,4 +109,12 @@ fn debug_camera_rotation(
         camera_transform.translation(),
         camera.rotation
     );
+}
+
+/// Tracks the number of entity with `Selected` component.
+fn debug_nb_selected(
+    mut display: Single<&mut Text, With<EntityWithSelectedDebug>>,
+    query: Query<Entity, With<Selected>>,
+) {
+    display.0 = format!("{ENTITY_WITH_SELECTED_STR}{}", query.count());
 }
