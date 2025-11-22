@@ -70,7 +70,7 @@ struct Card;
 pub struct Selected;
 
 #[derive(Component)]
-struct CursorDistance(Vec2);
+struct CursorDistance(Vec3);
 
 #[derive(Resource)]
 struct LastItemZTransformValue(f32);
@@ -319,11 +319,10 @@ fn mouse_drag_start(
         return;
     };
 
+    // Add to all selected entity the distance to the cursor.
     for (entity, transform) in all_selected {
-        let cursor_distance = CursorDistance(Vec2 {
-            x: transform.translation.x - cursor_position_in_world.x,
-            y: transform.translation.y - cursor_position_in_world.y,
-        });
+        let cursor_distance =
+            CursorDistance(transform.translation - cursor_position_in_world.extend(0.0));
         commands.entity(entity).insert(cursor_distance);
     }
 }
@@ -359,8 +358,7 @@ fn drag(
     };
 
     for (mut transform, cursor_distance) in all_selected {
-        transform.translation.x = cursor_position_in_world.x + cursor_distance.0.x;
-        transform.translation.y = cursor_position_in_world.y + cursor_distance.0.y;
+        transform.translation = cursor_position_in_world.extend(0.0) + cursor_distance.0;
     }
 }
 

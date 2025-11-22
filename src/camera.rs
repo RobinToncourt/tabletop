@@ -9,14 +9,19 @@ const SCROLL_FACTOR: f32 = if cfg!(target_arch = "wasm32") {
     10.0
 };
 const ROTATION_FACTOR: f32 = std::f32::consts::PI / 32.0;
+const MOVEMENT_FACTOR: f32 = 10.0;
 
 #[derive(Resource)]
 pub struct CameraRotationAngle(pub f32);
+
+#[derive(Resource)]
+struct ZoomLevel(f32);
 
 pub struct CameraPlugin;
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(CameraRotationAngle(0.0))
+            .insert_resource(ZoomLevel(MOVEMENT_FACTOR))
             .add_systems(Startup, camera_setup)
             .add_systems(
                 Update,
@@ -45,20 +50,26 @@ fn zoom_in(
     camera: Single<&mut Projection>,
     mouse_wheel_input: Res<AccumulatedMouseScroll>,
     time: Res<Time>,
+    mut zoom_level: ResMut<ZoomLevel>
 ) {
     match *camera.into_inner() {
         Projection::Orthographic(ref mut orthographic) => {
             let mut log_scale = orthographic.scale.ln();
             log_scale -= mouse_wheel_input.delta.y * time.delta_secs() * SCROLL_FACTOR;
-            orthographic.scale = log_scale.exp();
+            let log_scale = log_scale.exp();
+            orthographic.scale = log_scale;
+            zoom_level.0 = MOVEMENT_FACTOR * log_scale;
         }
         _ => (),
     }
 }
 
-fn move_camera<const X: i32, const Y: i32>(mut camera: Single<&mut Transform, With<Camera2d>>) {
-    camera.translation.x += X as f32;
-    camera.translation.y += Y as f32;
+fn move_camera<const X: i32, const Y: i32>(
+    mut camera: Single<&mut Transform, With<Camera2d>>,
+    zoom_level: Res<ZoomLevel>,
+) {
+    camera.translation.x += zoom_level.0 * X as f32;
+    camera.translation.y += zoom_level.0 * Y as f32;
 }
 
 fn rotate_camera_left(
