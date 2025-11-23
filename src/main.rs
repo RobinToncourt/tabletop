@@ -2,6 +2,7 @@ mod camera;
 mod debug;
 mod setup;
 mod ui;
+mod socket;
 
 use bevy::prelude::*;
 
@@ -12,6 +13,7 @@ fn main() {
             camera::CameraPlugin,
             debug::DebugPlugin,
             ui::UiPlugin,
+            socket::SocketPlugin,
         ))
         .run();
 }

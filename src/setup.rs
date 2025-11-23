@@ -91,6 +91,7 @@ impl Plugin for SetupPlugin {
                 .set(WindowPlugin {
                     primary_window: Some(Window {
                         fit_canvas_to_parent: true,
+                        prevent_default_event_handling: false,
                         ..default()
                     }),
                     ..default()
@@ -297,7 +298,7 @@ fn mouse_drag_start(
     drag_start: On<Pointer<DragStart>>,
     camera: Single<(&Camera, &GlobalTransform)>,
     window: Single<&Window>,
-    all_selected: Query<(Entity, &Transform), With<Selected>>,
+    all_selected: Query<(Entity, &mut Transform, Option<&Selected>)>,
     mut commands: Commands,
 ) {
     let (camera, camera_transform) = *camera;
@@ -310,11 +311,15 @@ fn mouse_drag_start(
     };
 
     // Add to all selected entity the distance to the cursor.
-    for (entity, transform) in all_selected {
-        let cursor_distance =
-            CursorDistance(transform.translation - cursor_position_in_world.extend(0.0));
-        commands.entity(entity).insert(cursor_distance);
+    for (entity, transform, selected) in all_selected {
+        if selected.is_some() {
+            let cursor_distance =
+                CursorDistance(transform.translation - cursor_position_in_world.extend(0.0));
+            commands.entity(entity).insert(cursor_distance);
+        }
     }
+
+    // Put all the entites with `Selected` on top of the others.
 }
 
 fn mouse_drag(

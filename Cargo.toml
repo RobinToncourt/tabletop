@@ -8,6 +8,8 @@ rust-version = "1.88"
 
 [dependencies]
 bevy = "0.17.2"
+bevy_ggrs = { version = "0.19", features = ["wasm-bindgen"] }
+bevy_matchbox = { version = "0.13", features = ["ggrs"] }
 
 [profile.release]
 opt-level = 'z'

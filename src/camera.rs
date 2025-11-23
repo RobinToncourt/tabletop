@@ -50,7 +50,7 @@ fn zoom_in(
     camera: Single<&mut Projection>,
     mouse_wheel_input: Res<AccumulatedMouseScroll>,
     time: Res<Time>,
-    mut zoom_level: ResMut<ZoomLevel>
+    mut zoom_level: ResMut<ZoomLevel>,
 ) {
     match *camera.into_inner() {
         Projection::Orthographic(ref mut orthographic) => {
@@ -64,34 +64,22 @@ fn zoom_in(
     }
 }
 
-fn move_camera_up(
-    camera: Single<&mut Transform, With<Camera2d>>,
-    zoom_level: Res<ZoomLevel>,
-) {
+fn move_camera_up(camera: Single<&mut Transform, With<Camera2d>>, zoom_level: Res<ZoomLevel>) {
     let forward = camera.rotation * Vec3::Y;
     move_camera(camera, forward, zoom_level);
 }
 
-fn move_camera_down(
-    camera: Single<&mut Transform, With<Camera2d>>,
-    zoom_level: Res<ZoomLevel>,
-) {
+fn move_camera_down(camera: Single<&mut Transform, With<Camera2d>>, zoom_level: Res<ZoomLevel>) {
     let forward = camera.rotation * Vec3::Y;
     move_camera(camera, -forward, zoom_level);
 }
 
-fn move_camera_right(
-    camera: Single<&mut Transform, With<Camera2d>>,
-    zoom_level: Res<ZoomLevel>,
-) {
+fn move_camera_right(camera: Single<&mut Transform, With<Camera2d>>, zoom_level: Res<ZoomLevel>) {
     let right = camera.rotation * Vec3::X;
     move_camera(camera, right, zoom_level);
 }
 
-fn move_camera_left(
-    camera: Single<&mut Transform, With<Camera2d>>,
-    zoom_level: Res<ZoomLevel>,
-) {
+fn move_camera_left(camera: Single<&mut Transform, With<Camera2d>>, zoom_level: Res<ZoomLevel>) {
     let right = camera.rotation * Vec3::X;
     move_camera(camera, -right, zoom_level);
 }
