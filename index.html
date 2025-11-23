@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+
+</head>
+    <title>Tabletop</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <style>
+        html, body {
+            margin: 0px;
+            height: 100%;
+        }
+    </style>
+</head>
+
+<body>
+    <script type="module">
+    import init from './tabletop.js'
+
+    init().catch((error) => {
+        if (!error.message.startsWith("Using exceptions for control flow, don't mind me. This isn't actually an error!")) {
+        throw error;
+        }
+    });
+    </script>
+</body>
+
+</html>
