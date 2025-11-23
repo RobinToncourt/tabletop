@@ -277,11 +277,6 @@ fn mouse_press(
     mut commands: Commands,
     mut all_selected: Query<Entity, With<Selected>>,
 ) {
-    let button = press.event().event.button;
-    if !matches!(button, PointerButton::Primary) {
-        return;
-    }
-
     let clicked_entity = press.event_target();
 
     if keyboard.pressed(KeyCode::ControlLeft) {
@@ -305,11 +300,6 @@ fn mouse_drag_start(
     all_selected: Query<(Entity, &Transform), With<Selected>>,
     mut commands: Commands,
 ) {
-    let button = drag_start.event().event.button;
-    if !matches!(button, PointerButton::Primary) {
-        return;
-    }
-
     let (camera, camera_transform) = *camera;
     let cursor_position_in_world: Option<Vec2> = window
         .cursor_position()
@@ -332,13 +322,11 @@ fn mouse_drag(
     camera: Single<(&Camera, &GlobalTransform)>,
     window: Single<&Window>,
     all_selected: Query<(&mut Transform, &CursorDistance), With<Selected>>,
-    // query: Query<&mut Transform>,
 ) {
     let button = on_drag.event().event.button;
     match button {
         PointerButton::Primary => drag(camera, window, all_selected),
-        PointerButton::Secondary => {}
-        //rotate_item(on_drag, camera, window, query),
+        PointerButton::Secondary => rotate_item(on_drag, camera, window, all_selected),
         PointerButton::Middle => {}
     }
 }
@@ -366,7 +354,7 @@ fn rotate_item(
     on_drag: On<Pointer<Drag>>,
     camera: Single<(&Camera, &GlobalTransform)>,
     window: Single<&Window>,
-    mut query: Query<&mut Transform>,
+    mut query: Query<(&mut Transform, &CursorDistance), With<Selected>>,
 ) {
     let (camera, camera_transform) = *camera;
     let cursor_translation: Option<Vec2> = window
@@ -378,9 +366,9 @@ fn rotate_item(
     if let (Some(cursor_translation), Ok(mut target_transform)) =
         (cursor_translation, target_transform)
     {
-        let to_cursor = (cursor_translation - target_transform.translation.xy()).normalize();
+        let to_cursor = (cursor_translation - target_transform.0.translation.xy()).normalize();
         let rotate_to_cursor = Quat::from_rotation_arc(Vec3::Y, to_cursor.extend(0.0));
-        target_transform.rotation = rotate_to_cursor;
+        target_transform.0.rotation = rotate_to_cursor;
     }
 }
 
