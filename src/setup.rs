@@ -203,6 +203,7 @@ fn spawn_chess(
     }
 }
 
+#[allow(dead_code)]
 fn spawn_cards(
     mut commands: Commands,
     asset_server: Res<AssetServer>,

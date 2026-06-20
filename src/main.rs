@@ -1,8 +1,8 @@
 mod camera;
 mod debug;
 mod setup;
-mod ui;
 mod socket;
+mod ui;
 
 use bevy::prelude::*;
 

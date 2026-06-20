@@ -4,8 +4,7 @@ use bevy_matchbox::prelude::*;
 pub struct SocketPlugin;
 impl Plugin for SocketPlugin {
     fn build(&self, app: &mut App) {
-        app
-            .add_systems(Startup, open_socket_system)
+        app.add_systems(Startup, open_socket_system)
             .add_systems(Update, say_hello_system);
     }
 }

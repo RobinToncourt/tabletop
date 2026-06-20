@@ -94,7 +94,7 @@ fn spawn_debug_tools(mut commands: Commands) {
             top: px(300),
             right: px(10),
             ..default()
-        }
+        },
     ));
 }
 
@@ -144,5 +144,8 @@ fn debug_connected_peers(
     mut display: Single<&mut Text, With<ConnectedPeersDebug>>,
     socket: Res<Socket>,
 ) {
-    display.0 = format!("{CONNECTED_PEERS_STR}{}", socket.0.connected_peers().count());
+    display.0 = format!(
+        "{CONNECTED_PEERS_STR}{}",
+        socket.0.connected_peers().count()
+    );
 }

@@ -20,8 +20,7 @@ struct ZoomLevel(f32);
 pub struct CameraPlugin;
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
-        app
-            .insert_resource(CameraRotationAngle(0.0))
+        app.insert_resource(CameraRotationAngle(0.0))
             .insert_resource(ZoomLevel(MOVEMENT_FACTOR))
             .add_systems(Startup, camera_setup)
             .add_systems(
@@ -53,15 +52,12 @@ fn zoom_in(
     time: Res<Time>,
     mut zoom_level: ResMut<ZoomLevel>,
 ) {
-    match *camera.into_inner() {
-        Projection::Orthographic(ref mut orthographic) => {
-            let mut log_scale = orthographic.scale.ln();
-            log_scale -= mouse_wheel_input.delta.y * time.delta_secs() * SCROLL_FACTOR;
-            let log_scale = log_scale.exp();
-            orthographic.scale = log_scale;
-            zoom_level.0 = MOVEMENT_FACTOR * log_scale;
-        }
-        _ => (),
+    if let Projection::Orthographic(ref mut orthographic) = *camera.into_inner() {
+        let mut log_scale = orthographic.scale.ln();
+        log_scale -= mouse_wheel_input.delta.y * time.delta_secs() * SCROLL_FACTOR;
+        let log_scale = log_scale.exp();
+        orthographic.scale = log_scale;
+        zoom_level.0 = MOVEMENT_FACTOR * log_scale;
     }
 }
 
