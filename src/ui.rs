@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-const INSTRUCTIONS: &str = "ZQSD/arrows to move camera\nA and E to rotate camera\nYou can zoom with the wheel\nLeft clic on card to move it arround\nRight to rotate it";
+const INSTRUCTIONS: &str = "ZQSD/arrows to move camera\nA and E to rotate camera\nYou can zoom with the wheel\nLeft click on card to move it around\nRight to rotate it";
 
 const LIGHT_COLOR: Color = Color::srgb(0.9, 0.9, 0.9);
 const DARK_COLOR: Color = Color::srgb(0.1, 0.1, 0.1);
@@ -18,7 +18,7 @@ impl Plugin for UiPlugin {
 }
 
 fn spawn_ui(mut commands: Commands) {
-    // Spawn instrctions text, top left.
+    // Spawn instructions text, top left.
     commands.spawn((
         Text::new(INSTRUCTIONS),
         TextFont {
@@ -68,14 +68,11 @@ fn button_change_background(
     mut background_color: ResMut<ClearColor>,
     interaction_query: Single<&Interaction, (With<ChangeBackgroundButton>, Changed<Interaction>)>,
 ) {
-    match **interaction_query {
-        Interaction::Pressed => {
-            if background_color.0 == LIGHT_COLOR {
-                background_color.0 = DARK_COLOR;
-            } else {
-                background_color.0 = LIGHT_COLOR;
-            }
+    if **interaction_query == Interaction::Pressed {
+        if background_color.0 == LIGHT_COLOR {
+            background_color.0 = DARK_COLOR;
+        } else {
+            background_color.0 = LIGHT_COLOR;
         }
-        _ => {}
     }
 }

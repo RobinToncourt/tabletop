@@ -13,7 +13,7 @@ fn main() {
             camera::CameraPlugin,
             debug::DebugPlugin,
             ui::UiPlugin,
-            socket::SocketPlugin,
+            // socket::SocketPlugin,
         ))
         .run();
 }

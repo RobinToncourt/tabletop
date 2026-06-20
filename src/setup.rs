@@ -102,7 +102,6 @@ impl Plugin for SetupPlugin {
                     ..default()
                 }),
         )
-        .add_plugins(MeshPickingPlugin)
         .insert_resource(LastItemZTransformValue(0.0))
         .add_systems(Startup, setup);
     }
@@ -114,8 +113,8 @@ fn setup(
     atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
     z_transform: ResMut<LastItemZTransformValue>,
 ) {
-    // spawn_chess(commands, asset_server, atlas_layouts, z_transform);
-    spawn_cards(commands, asset_server, z_transform);
+    spawn_chess(commands, asset_server, atlas_layouts, z_transform);
+    //spawn_cards(commands, asset_server, z_transform);
 }
 
 fn spawn_chess(
@@ -240,8 +239,8 @@ fn spawn_cards(
         );
     }
 
-    // Spanw card back.
-    let sprite_path = format!("card_back.png");
+    // Spawn card back.
+    let sprite_path = "card_back.png".to_owned();
     let sprite = Sprite {
         image: asset_server.load(&sprite_path),
         custom_size: Some(sprite_size),
@@ -294,18 +293,25 @@ fn mouse_press(
     }
 }
 
+fn get_cursor_position_in_world(
+    camera: Single<(&Camera, &GlobalTransform)>,
+    window: Single<&Window>,
+) -> Option<Vec2> {
+    let (camera, camera_transform) = *camera;
+    window
+        .cursor_position()
+        .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor).ok())
+        .map(|ray| ray.origin.truncate())
+}
+
 fn mouse_drag_start(
-    drag_start: On<Pointer<DragStart>>,
+    _drag_start: On<Pointer<DragStart>>,
     camera: Single<(&Camera, &GlobalTransform)>,
     window: Single<&Window>,
     all_selected: Query<(Entity, &mut Transform, Option<&Selected>)>,
     mut commands: Commands,
 ) {
-    let (camera, camera_transform) = *camera;
-    let cursor_position_in_world: Option<Vec2> = window
-        .cursor_position()
-        .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor).ok())
-        .map(|ray| ray.origin.truncate());
+    let cursor_position_in_world = get_cursor_position_in_world(camera, window);
     let Some(cursor_position_in_world) = cursor_position_in_world else {
         return;
     };
@@ -319,7 +325,7 @@ fn mouse_drag_start(
         }
     }
 
-    // Put all the entites with `Selected` on top of the others.
+    // TODO: Put all the entities with `Selected` on top of the others.
 }
 
 fn mouse_drag(
@@ -341,11 +347,7 @@ fn drag(
     window: Single<&Window>,
     all_selected: Query<(&mut Transform, &CursorDistance), With<Selected>>,
 ) {
-    let (camera, camera_transform) = *camera;
-    let cursor_position_in_world: Option<Vec2> = window
-        .cursor_position()
-        .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor).ok())
-        .map(|ray| ray.origin.truncate());
+    let cursor_position_in_world = get_cursor_position_in_world(camera, window);
     let Some(cursor_position_in_world) = cursor_position_in_world else {
         return;
     };

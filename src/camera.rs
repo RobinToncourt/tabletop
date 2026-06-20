@@ -20,7 +20,8 @@ struct ZoomLevel(f32);
 pub struct CameraPlugin;
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(CameraRotationAngle(0.0))
+        app
+            .insert_resource(CameraRotationAngle(0.0))
             .insert_resource(ZoomLevel(MOVEMENT_FACTOR))
             .add_systems(Startup, camera_setup)
             .add_systems(

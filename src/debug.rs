@@ -1,10 +1,12 @@
 use bevy::prelude::*;
 
 use crate::setup::Selected;
+use crate::socket::Socket;
 
 const CURSOR_POSITION_STR: &str = "Cursor position: \nTo camera:";
 const CAMERA_ROTATION_STR: &str = "Camera rotation:";
 const ENTITY_WITH_SELECTED_STR: &str = "Entity with selected: ";
+const CONNECTED_PEERS_STR: &str = "Connected peers: ";
 
 #[derive(Component)]
 struct CursorPosDebug;
@@ -15,6 +17,9 @@ struct CameraRotationDebug;
 #[derive(Component)]
 struct EntityWithSelectedDebug;
 
+#[derive(Component)]
+struct ConnectedPeersDebug;
+
 pub struct DebugPlugin;
 impl Plugin for DebugPlugin {
     fn build(&self, app: &mut App) {
@@ -24,6 +29,7 @@ impl Plugin for DebugPlugin {
                 debug_cursor_position,
                 debug_camera_rotation,
                 debug_nb_selected,
+                // debug_connected_peers,
             ),
         );
     }
@@ -75,6 +81,21 @@ fn spawn_debug_tools(mut commands: Commands) {
             ..default()
         },
     ));
+    commands.spawn((
+        ConnectedPeersDebug,
+        Text::new(CONNECTED_PEERS_STR),
+        TextFont {
+            font_size: 12.0,
+            ..default()
+        },
+        TextColor(Color::srgb(0.5, 0.5, 1.0)),
+        Node {
+            position_type: PositionType::Absolute,
+            top: px(300),
+            right: px(10),
+            ..default()
+        }
+    ));
 }
 
 /// Tracks the position of the cursor in the window.
@@ -117,4 +138,11 @@ fn debug_nb_selected(
     query: Query<Entity, With<Selected>>,
 ) {
     display.0 = format!("{ENTITY_WITH_SELECTED_STR}{}", query.count());
+}
+
+fn debug_connected_peers(
+    mut display: Single<&mut Text, With<ConnectedPeersDebug>>,
+    socket: Res<Socket>,
+) {
+    display.0 = format!("{CONNECTED_PEERS_STR}{}", socket.0.connected_peers().count());
 }
