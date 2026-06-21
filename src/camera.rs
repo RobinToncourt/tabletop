@@ -3,13 +3,15 @@ use bevy::{
     prelude::*,
 };
 
+/// Speed for camera movements.
+const SPEED_FACTOR: f32 = 60.0;
 const SCROLL_FACTOR: f32 = if cfg!(target_arch = "wasm32") {
     0.2
 } else {
     10.0
 };
-const ROTATION_FACTOR: f32 = std::f32::consts::PI / 32.0;
-const MOVEMENT_FACTOR: f32 = 10.0;
+const ROTATION_FACTOR: f32 = std::f32::consts::PI / 32.0 * SPEED_FACTOR;
+const MOVEMENT_FACTOR: f32 = 10.0 * SPEED_FACTOR;
 
 #[derive(Resource)]
 pub struct CameraRotationAngle(pub f32);
@@ -27,6 +29,7 @@ impl Plugin for CameraPlugin {
                 Update,
                 (
                     zoom_in.run_if(has_wheel_moved),
+                    // KeyCode::KeyW = physical W position (QWERTY); shows as Z on AZERTY
                     move_camera_up.run_if(input_pressed(KeyCode::KeyW)),
                     move_camera_down.run_if(input_pressed(KeyCode::KeyS)),
                     move_camera_right.run_if(input_pressed(KeyCode::KeyD)),
@@ -61,53 +64,81 @@ fn zoom_in(
     }
 }
 
-fn move_camera_up(camera: Single<&mut Transform, With<Camera2d>>, zoom_level: Res<ZoomLevel>) {
+/*
+ * Camera movements.
+ */
+
+fn move_camera_up(
+    camera: Single<&mut Transform, With<Camera2d>>,
+    time: Res<Time>,
+    zoom_level: Res<ZoomLevel>,
+) {
     let forward = camera.rotation * Vec3::Y;
-    move_camera(camera, forward, zoom_level);
+    move_camera(camera, forward, zoom_level, time);
 }
 
-fn move_camera_down(camera: Single<&mut Transform, With<Camera2d>>, zoom_level: Res<ZoomLevel>) {
+fn move_camera_down(
+    camera: Single<&mut Transform, With<Camera2d>>,
+    time: Res<Time>,
+    zoom_level: Res<ZoomLevel>,
+) {
     let forward = camera.rotation * Vec3::Y;
-    move_camera(camera, -forward, zoom_level);
+    move_camera(camera, -forward, zoom_level, time);
 }
 
-fn move_camera_right(camera: Single<&mut Transform, With<Camera2d>>, zoom_level: Res<ZoomLevel>) {
+fn move_camera_right(
+    camera: Single<&mut Transform, With<Camera2d>>,
+    time: Res<Time>,
+    zoom_level: Res<ZoomLevel>,
+) {
     let right = camera.rotation * Vec3::X;
-    move_camera(camera, right, zoom_level);
+    move_camera(camera, right, zoom_level, time);
 }
 
-fn move_camera_left(camera: Single<&mut Transform, With<Camera2d>>, zoom_level: Res<ZoomLevel>) {
+fn move_camera_left(
+    camera: Single<&mut Transform, With<Camera2d>>,
+    time: Res<Time>,
+    zoom_level: Res<ZoomLevel>,
+) {
     let right = camera.rotation * Vec3::X;
-    move_camera(camera, -right, zoom_level);
+    move_camera(camera, -right, zoom_level, time);
 }
 
 fn move_camera(
     mut camera: Single<&mut Transform, With<Camera2d>>,
     movement: Vec3,
     zoom_level: Res<ZoomLevel>,
+    time: Res<Time>,
 ) {
-    camera.translation += movement * zoom_level.0;
+    camera.translation += movement * time.delta_secs() * zoom_level.0;
 }
+
+/*
+ * Camera rotation.
+ */
 
 fn rotate_camera_left(
     camera: Single<&mut Transform, With<Camera2d>>,
     camera_rotation_angle: ResMut<CameraRotationAngle>,
+    time: Res<Time>,
 ) {
-    rotate_camera(camera, camera_rotation_angle, ROTATION_FACTOR);
+    rotate_camera(camera, camera_rotation_angle, time, ROTATION_FACTOR);
 }
 
 fn rotate_camera_right(
     camera: Single<&mut Transform, With<Camera2d>>,
     camera_rotation_angle: ResMut<CameraRotationAngle>,
+    time: Res<Time>,
 ) {
-    rotate_camera(camera, camera_rotation_angle, -ROTATION_FACTOR);
+    rotate_camera(camera, camera_rotation_angle, time, -ROTATION_FACTOR);
 }
 
 fn rotate_camera(
     mut camera: Single<&mut Transform, With<Camera2d>>,
     mut camera_rotation_angle: ResMut<CameraRotationAngle>,
+    time: Res<Time>,
     rotation_angle: f32,
 ) {
-    camera_rotation_angle.0 += rotation_angle;
+    camera_rotation_angle.0 += rotation_angle * time.delta_secs();
     camera.rotation = Quat::from_rotation_z(camera_rotation_angle.0);
 }

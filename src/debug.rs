@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::setup::Selected;
+use crate::items::Selected;
 use crate::socket::Socket;
 
 const CURSOR_POSITION_STR: &str = "Cursor position: \nTo camera:";

@@ -7,7 +7,7 @@ BINARY=target/$TARGET/release/tabletop.wasm
 OUTPUT=www/tabletop_bg.wasm
 
 echo "Building to $TARGET..."
-cargo build --target $TARGET --release
+cargo build --profile wasm-release --target $TARGET
 
 echo "Create www folder..."
 mkdir -p www

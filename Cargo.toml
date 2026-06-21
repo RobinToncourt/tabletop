@@ -7,25 +7,46 @@ include = ["**/*.rs", "Cargo.toml"]
 rust-version = "1.88"
 
 [dependencies]
-bevy = { version= "0.17.2", default-features = false, features = [
-    "bevy_winit", "bevy_sprite", "bevy_ui", "bevy_text", "bevy_picking", "png", "webgl2", "x11",
-    "bevy_log", "debug"
+# Game engine.
+bevy = { version = "0.17.2", default-features = false, features = [
+    "bevy_winit",
+    "bevy_render", "bevy_core_pipeline",
+    "bevy_sprite", "bevy_sprite_render",
+    "bevy_ui", "bevy_ui_render",
+    "bevy_text", "default_font",
+    "bevy_picking", "bevy_sprite_picking_backend", "bevy_ui_picking_backend",
+    "png", "bevy_log",
 ] }
+# Bevy support crate for networking, version is binded to bevy version
 bevy_matchbox = "0.13.0"
+# Bevy framerate configuration, version is binded to bevy version
+bevy_framepace = "0.20"
+
+# Enable webgl2 feature only for wasm build.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+bevy = { version = "0.17.2", features = ["webgl2"] }
+
+# Enable x11 and wayland feature only for linux build.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+bevy = { version = "0.17.2", features = ["x11", "wayland"] }
 
 [profile.release]
-opt-level = 'z'
+opt-level = 3
 lto = true
 codegen-units = 1
-strip = "debuginfo"
-overflow-checks = false
+strip = true
 panic = "abort"
+
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"
 
 [profile.dev]
 opt-level = 1
 
+# Compile all crates.
 [profile.dev.package."*"]
 opt-level = 3
 
 [features]
-dev = ["bevy/dynamic_linking"]
+dev = ["bevy/dynamic_linking", "bevy/debug"]

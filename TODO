@@ -1,16 +1,11 @@
 - Peer-to-peer multiplayer with Matchbox.
 - Move world with left click on background.
-- Adjust camera movement base on zoom.
-- Change on_drag so it doesn't put mouse to center of object.
-- Add ui:
-    - to change background color.
-- Double clic to turn card around.
-- Left clic to have sub-menu options.
+- Add slide bar to change frame-pacing limit.
+- Add menu to change keybinds.
+- Double click to turn card around.
+- Left click to have sub-menu options.
 - Add touchscreen support
-- Keep card surper-position order.
-
-- Refactor code:
-    - Split into dedicated files and bundles.
-
-- BUG: Left and right clic at the same time makes the card disappeared.
-- BUG: The first time the card is move, the super-position is messed up.
+- Keep card super-position order.
+- Fuze cards into one file and use an atlas.
+- Harmonize item size.
+- Change edge colored outline based on item size.

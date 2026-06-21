@@ -1,6 +1,10 @@
 use bevy::prelude::*;
 
-const INSTRUCTIONS: &str = "ZQSD/arrows to move camera\nA and E to rotate camera\nYou can zoom with the wheel\nLeft click on card to move it around\nRight to rotate it";
+const INSTRUCTIONS: &str = r#"ZQSD to move camera
+A and E to rotate camera
+You can zoom with the wheel
+Left click on card to move it around
+Right to rotate it"#;
 
 const LIGHT_COLOR: Color = Color::srgb(0.9, 0.9, 0.9);
 const DARK_COLOR: Color = Color::srgb(0.1, 0.1, 0.1);

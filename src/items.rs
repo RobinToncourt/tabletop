@@ -1,4 +1,10 @@
-use bevy::{asset::AssetMetaCheck, prelude::*};
+use bevy::{
+    prelude::*,
+    reflect::TypePath,
+    render::render_resource::AsBindGroup,
+    shader::ShaderRef,
+    sprite_render::{AlphaMode2d, Material2d, Material2dPlugin},
+};
 
 const CARD_IMAGES: &[&str] = &[
     // ♠️ Spades
@@ -63,83 +69,166 @@ const CARD_IMAGES: &[&str] = &[
 ];
 const CARD_SIZE: Vec2 = Vec2::new(500.0, 726.0);
 
-#[derive(Component)]
-struct Card;
+pub struct ItemsPlugin;
+impl Plugin for ItemsPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_plugins(Material2dPlugin::<OutlineMaterial>::default())
+            .insert_resource(LastItemZTransformValue(0.0))
+            .add_systems(Startup, setup)
+            .add_systems(Update, (add_outline, remove_outline));
+    }
+}
+
+#[derive(Asset, TypePath, AsBindGroup, Clone)]
+struct OutlineMaterial {
+    #[texture(0)]
+    #[sampler(1)]
+    texture: Handle<Image>,
+    #[uniform(2)]
+    color: LinearRgba,
+    #[uniform(2)]
+    region: Vec4, // (u_min, v_min, u_max, v_max) of the sprite within `texture`
+    #[uniform(2)]
+    outline_px: f32, // outline thickness, in source-texture texels
+    #[uniform(2)]
+    mesh_scale: f32, // how much bigger the outline mesh is than the sprite (e.g. 1.15)
+}
+
+impl Material2d for OutlineMaterial {
+    fn fragment_shader() -> ShaderRef {
+        "shaders/outline.wgsl".into()
+    }
+    fn alpha_mode(&self) -> AlphaMode2d {
+        AlphaMode2d::Blend
+    }
+}
 
 #[derive(Component)]
 pub struct Selected;
+
+#[derive(Component)]
+struct SelectionOutline;
 
 #[derive(Component)]
 struct CursorDistance(Vec3);
 
 #[derive(Resource)]
 struct LastItemZTransformValue(f32);
-
-fn get_then_increase(z: &mut LastItemZTransformValue) -> f32 {
-    let tmp = z.0;
-    z.0 += 1.0;
-    tmp
+impl LastItemZTransformValue {
+    fn get_then_increase(&mut self) -> f32 {
+        let tmp = self.0;
+        self.0 += 1.0;
+        tmp
+    }
 }
 
-pub struct SetupPlugin;
-impl Plugin for SetupPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_plugins(
-            DefaultPlugins
-                .build()
-                // This is so the wasm window fit the browser page.
-                .set(WindowPlugin {
-                    primary_window: Some(Window {
-                        fit_canvas_to_parent: true,
-                        prevent_default_event_handling: false,
-                        ..default()
-                    }),
-                    ..default()
-                })
-                // This is so it doesn't try to fetch .meta files for assets.
-                .set(AssetPlugin {
-                    meta_check: AssetMetaCheck::Never,
-                    ..default()
-                }),
-        )
-        .insert_resource(LastItemZTransformValue(0.0))
-        .add_systems(Startup, setup);
+fn add_outline(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<OutlineMaterial>>,
+    atlas_layouts: Res<Assets<TextureAtlasLayout>>,
+    newly_selected: Query<(Entity, &Sprite), Added<Selected>>,
+) {
+    for (entity, sprite) in &newly_selected {
+        let (region, base_size) = match &sprite.texture_atlas {
+            Some(atlas) => {
+                let layout = atlas_layouts.get(&atlas.layout).unwrap();
+                let rect = layout.textures[atlas.index];
+                let size = layout.size.as_vec2();
+                (
+                    Vec4::new(
+                        rect.min.x as f32 / size.x,
+                        rect.min.y as f32 / size.y,
+                        rect.max.x as f32 / size.x,
+                        rect.max.y as f32 / size.y,
+                    ),
+                    rect.size().as_vec2(),
+                )
+            }
+            None => (
+                Vec4::new(0.0, 0.0, 1.0, 1.0),
+                sprite.custom_size.unwrap_or(Vec2::splat(64.0)),
+            ),
+        };
+
+        let mesh_scale = 1.15;
+        commands.entity(entity).with_children(|parent| {
+            parent.spawn((
+                SelectionOutline,
+                Mesh2d(meshes.add(Rectangle::new(
+                    base_size.x * mesh_scale,
+                    base_size.y * mesh_scale,
+                ))),
+                MeshMaterial2d(materials.add(OutlineMaterial {
+                    texture: sprite.image.clone(),
+                    color: LinearRgba::rgb(1.0, 0.85, 0.1),
+                    region,
+                    outline_px: 5.0,
+                    mesh_scale,
+                })),
+                Pickable::IGNORE,
+            ));
+        });
+    }
+}
+
+fn remove_outline(
+    mut commands: Commands,
+    mut removed: RemovedComponents<Selected>,
+    children_query: Query<&Children>,
+    outline_query: Query<Entity, With<SelectionOutline>>,
+) {
+    for entity in removed.read() {
+        if let Ok(children) = children_query.get(entity) {
+            for &child in children {
+                if outline_query.contains(child) {
+                    commands.entity(child).despawn();
+                }
+            }
+        }
     }
 }
 
 fn setup(
-    commands: Commands,
-    asset_server: Res<AssetServer>,
-    atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
-    z_transform: ResMut<LastItemZTransformValue>,
-) {
-    spawn_chess(commands, asset_server, atlas_layouts, z_transform);
-    //spawn_cards(commands, asset_server, z_transform);
-}
-
-fn spawn_chess(
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
+    mut asset_server: Res<AssetServer>,
+    atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
     mut z_transform: ResMut<LastItemZTransformValue>,
 ) {
+    spawn_chess(
+        &mut commands,
+        &mut asset_server,
+        atlas_layouts,
+        &mut z_transform,
+    );
+    spawn_cards(&mut commands, &mut asset_server, &mut z_transform);
+}
+
+#[allow(clippy::items_after_statements)]
+#[allow(dead_code)]
+fn spawn_chess(
+    mut commands: &mut Commands,
+    asset_server: &mut Res<AssetServer>,
+    mut atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
+    z_transform: &mut ResMut<LastItemZTransformValue>,
+) {
     let chess_board = Sprite {
-        image: asset_server.load("chess_board.png"),
+        image: asset_server.load("chess/chess_board.png"),
         ..default()
     };
-    let transform = Transform::from_xyz(0.0, 0.0, get_then_increase(&mut z_transform));
+    let transform = Transform::from_xyz(0.0, 0.0, z_transform.get_then_increase());
     commands.spawn((chess_board, transform));
 
-    let pieces_texture = asset_server.load("ChessPiecesArray.png");
+    let pieces_texture = asset_server.load("chess/chess_pieces.png");
     let texture_atlas = TextureAtlasLayout::from_grid(UVec2::splat(60), 6, 2, None, None);
     let texture_atlas_handle = atlas_layouts.add(texture_atlas);
 
     let chess_board_size = (637.0 / 2.0, 636.0 / 2.0);
 
-    const BLACK_BACKLANE: f32 = 0.8;
-    const BLACK_FRONTLANE: f32 = 0.58;
-    const WHITE_BACKLANE: f32 = -0.8;
-    const WHITE_FRONTLANE: f32 = -0.58;
+    const BLACK_BACK_LANE: f32 = 0.8;
+    const BLACK_FRONT_LANE: f32 = 0.58;
+    const WHITE_BACK_LANE: f32 = -0.8;
+    const WHITE_FRONT_LANE: f32 = -0.58;
 
     const COL_A: f32 = -0.8;
     const COL_B: f32 = -0.6;
@@ -152,38 +241,38 @@ fn spawn_chess(
     const COL_H: f32 = 0.8;
 
     let pieces_pos: &[(usize, f32, f32)] = &[
-        (0, COL_E, BLACK_BACKLANE),
-        (1, COL_D, BLACK_BACKLANE),
-        (2, COL_A, BLACK_BACKLANE),
-        (2, COL_H, BLACK_BACKLANE),
-        (3, COL_B, BLACK_BACKLANE),
-        (3, COL_G, BLACK_BACKLANE),
-        (4, COL_C, BLACK_BACKLANE),
-        (4, COL_F, BLACK_BACKLANE),
-        (5, COL_A, BLACK_FRONTLANE),
-        (5, COL_B, BLACK_FRONTLANE),
-        (5, COL_C, BLACK_FRONTLANE),
-        (5, COL_D, BLACK_FRONTLANE),
-        (5, COL_E, BLACK_FRONTLANE),
-        (5, COL_F, BLACK_FRONTLANE),
-        (5, COL_G, BLACK_FRONTLANE),
-        (5, COL_H, BLACK_FRONTLANE),
-        (6, COL_E, WHITE_BACKLANE),
-        (7, COL_D, WHITE_BACKLANE),
-        (8, COL_A, WHITE_BACKLANE),
-        (8, COL_H, WHITE_BACKLANE),
-        (9, COL_B, WHITE_BACKLANE),
-        (9, COL_G, WHITE_BACKLANE),
-        (10, COL_C, WHITE_BACKLANE),
-        (10, COL_F, WHITE_BACKLANE),
-        (11, COL_A, WHITE_FRONTLANE),
-        (11, COL_B, WHITE_FRONTLANE),
-        (11, COL_C, WHITE_FRONTLANE),
-        (11, COL_D, WHITE_FRONTLANE),
-        (11, COL_E, WHITE_FRONTLANE),
-        (11, COL_F, WHITE_FRONTLANE),
-        (11, COL_G, WHITE_FRONTLANE),
-        (11, COL_H, WHITE_FRONTLANE),
+        (0, COL_E, BLACK_BACK_LANE),
+        (1, COL_D, BLACK_BACK_LANE),
+        (2, COL_A, BLACK_BACK_LANE),
+        (2, COL_H, BLACK_BACK_LANE),
+        (3, COL_B, BLACK_BACK_LANE),
+        (3, COL_G, BLACK_BACK_LANE),
+        (4, COL_C, BLACK_BACK_LANE),
+        (4, COL_F, BLACK_BACK_LANE),
+        (5, COL_A, BLACK_FRONT_LANE),
+        (5, COL_B, BLACK_FRONT_LANE),
+        (5, COL_C, BLACK_FRONT_LANE),
+        (5, COL_D, BLACK_FRONT_LANE),
+        (5, COL_E, BLACK_FRONT_LANE),
+        (5, COL_F, BLACK_FRONT_LANE),
+        (5, COL_G, BLACK_FRONT_LANE),
+        (5, COL_H, BLACK_FRONT_LANE),
+        (6, COL_E, WHITE_BACK_LANE),
+        (7, COL_D, WHITE_BACK_LANE),
+        (8, COL_A, WHITE_BACK_LANE),
+        (8, COL_H, WHITE_BACK_LANE),
+        (9, COL_B, WHITE_BACK_LANE),
+        (9, COL_G, WHITE_BACK_LANE),
+        (10, COL_C, WHITE_BACK_LANE),
+        (10, COL_F, WHITE_BACK_LANE),
+        (11, COL_A, WHITE_FRONT_LANE),
+        (11, COL_B, WHITE_FRONT_LANE),
+        (11, COL_C, WHITE_FRONT_LANE),
+        (11, COL_D, WHITE_FRONT_LANE),
+        (11, COL_E, WHITE_FRONT_LANE),
+        (11, COL_F, WHITE_FRONT_LANE),
+        (11, COL_G, WHITE_FRONT_LANE),
+        (11, COL_H, WHITE_FRONT_LANE),
     ];
 
     for (z, x, y) in pieces_pos {
@@ -197,21 +286,20 @@ fn spawn_chess(
         let transform = Transform::from_xyz(
             *x * chess_board_size.0,
             *y * chess_board_size.1,
-            get_then_increase(&mut z_transform),
+            z_transform.get_then_increase(),
         );
         spawn_draggable(&mut commands, (piece, Pickable::default(), transform));
     }
 }
 
-#[allow(dead_code)]
 fn spawn_cards(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut z_transform: ResMut<LastItemZTransformValue>,
+    mut commands: &mut Commands,
+    asset_server: &mut Res<AssetServer>,
+    z_transform: &mut ResMut<LastItemZTransformValue>,
 ) {
     let sprite_size = CARD_SIZE / 10.0;
 
-    let start_x_offset = -325.0;
+    let start_x_offset = -1625.0;
     let start_y_offset = 108.9;
 
     // Spawn cards.
@@ -231,17 +319,17 @@ fn spawn_cards(
         let transform = Transform::from_xyz(
             start_x_offset + x_pos * sprite_size.x,
             start_y_offset - y_pos * sprite_size.y,
-            get_then_increase(&mut z_transform),
+            z_transform.get_then_increase(),
         );
 
         spawn_draggable(
             &mut commands,
-            (sprite, Pickable::default(), transform, Card),
+            (sprite, Pickable::default(), transform),
         );
     }
 
     // Spawn card back.
-    let sprite_path = "card_back.png".to_owned();
+    let sprite_path = "cards/card_back.png".to_owned();
     let sprite = Sprite {
         image: asset_server.load(&sprite_path),
         custom_size: Some(sprite_size),
@@ -250,12 +338,12 @@ fn spawn_cards(
     let transform = Transform::from_xyz(
         start_x_offset + 2.0 * sprite_size.x,
         start_y_offset - 4.0 * sprite_size.y,
-        get_then_increase(&mut z_transform),
+        z_transform.get_then_increase(),
     );
 
     spawn_draggable(
         &mut commands,
-        (sprite, Pickable::default(), transform, Card),
+        (sprite, Pickable::default(), transform),
     );
 }
 
@@ -309,7 +397,7 @@ fn mouse_drag_start(
     _drag_start: On<Pointer<DragStart>>,
     camera: Single<(&Camera, &GlobalTransform)>,
     window: Single<&Window>,
-    all_selected: Query<(Entity, &mut Transform, Option<&Selected>)>,
+    all_selected: Query<(Entity, &mut Transform), With<Selected>>,
     mut commands: Commands,
 ) {
     let cursor_position_in_world = get_cursor_position_in_world(camera, window);
@@ -318,12 +406,10 @@ fn mouse_drag_start(
     };
 
     // Add to all selected entity the distance to the cursor.
-    for (entity, transform, selected) in all_selected {
-        if selected.is_some() {
-            let cursor_distance =
-                CursorDistance(transform.translation - cursor_position_in_world.extend(0.0));
-            commands.entity(entity).insert(cursor_distance);
-        }
+    for (entity, transform) in all_selected {
+        let cursor_distance =
+            CursorDistance(transform.translation - cursor_position_in_world.extend(0.0));
+        commands.entity(entity).insert(cursor_distance);
     }
 
     // TODO: Put all the entities with `Selected` on top of the others.
