@@ -1,5 +1,9 @@
 use bevy::prelude::*;
 
+use bevy_egui::egui::Visuals;
+use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui};
+use bevy_framepace::{FramepaceSettings, Limiter};
+
 const INSTRUCTIONS: &str = r#"ZQSD to move camera
 A and E to rotate camera
 You can zoom with the wheel
@@ -15,9 +19,10 @@ struct ChangeBackgroundButton;
 pub struct UiPlugin;
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(ClearColor(LIGHT_COLOR))
+        app.add_plugins(EguiPlugin::default())
+            .insert_resource(ClearColor(LIGHT_COLOR))
             .add_systems(Startup, spawn_ui)
-            .add_systems(Update, button_change_background);
+            .add_systems(EguiPrimaryContextPass, egui_system);
     }
 }
 
@@ -32,51 +37,71 @@ fn spawn_ui(mut commands: Commands) {
         TextColor(Color::srgb(0.5, 0.5, 1.0)),
         Node {
             position_type: PositionType::Absolute,
-            top: px(5),
-            left: px(5),
+            top: Val::Px(35.0),
+            left: Val::Px(5.0),
             ..default()
         },
-    ));
-
-    // Spawn button to change background color, top right.
-    commands.spawn((
-        Button,
-        ChangeBackgroundButton,
-        Node {
-            width: px(150),
-            height: px(65),
-            border: UiRect::all(px(5)),
-            position_type: PositionType::Absolute,
-            top: px(5),
-            right: px(5),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            ..default()
-        },
-        BorderColor::all(Color::WHITE),
-        BorderRadius::MAX,
-        BackgroundColor(Color::BLACK),
-        children![(
-            Text::new("Change\nbackground color"),
-            TextFont {
-                font_size: 12.0,
-                ..default()
-            },
-            TextColor(Color::srgb(0.5, 0.5, 1.0)),
-        )],
     ));
 }
 
-/// Inverse the background color on `ChangeBackgroundButton` button click.
-fn button_change_background(
+fn egui_system(
+    mut contexts: EguiContexts,
     mut background_color: ResMut<ClearColor>,
-    interaction_query: Single<&Interaction, (With<ChangeBackgroundButton>, Changed<Interaction>)>,
-) {
-    if **interaction_query == Interaction::Pressed {
+    mut framepace_settings: ResMut<FramepaceSettings>,
+) -> Result {
+    let ctx = contexts.ctx_mut()?;
+    let is_light = background_color.0 == LIGHT_COLOR;
+    ctx.set_visuals(if is_light {
+        Visuals::light()
+    } else {
+        Visuals::dark()
+    });
+
+    let button_label = if is_light { "🌙" } else { "☀" };
+
+    let current_fps_limiter = if let Limiter::Manual(duration) = framepace_settings.limiter {
+        Some(duration.as_secs_f64().recip())
+    } else {
+        None
+    };
+
+    let custom_frame = egui::Frame::default()
+        .fill(ctx.style().visuals.panel_fill)
+        .inner_margin(8.0);
+
+    let mut change_background = false;
+
+    egui::TopBottomPanel::top("menu_panel")
+        .frame(custom_frame)
+        .show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                let styled_text = egui::RichText::new(button_label);
+                let custom_button = egui::Button::new(styled_text);
+                change_background = ui.add(custom_button).clicked();
+
+                ui.separator();
+
+                if let Some(mut current_fps_limiter) = current_fps_limiter {
+                    ui.add(egui::Label::new(egui::RichText::new("FPS limit:")));
+                    let slider_text = egui::RichText::new("fps");
+                    let slider = ui.add(
+                        egui::Slider::new(&mut current_fps_limiter, 15.0..=144.0).text(slider_text),
+                    );
+
+                    if slider.changed() {
+                        framepace_settings.limiter = Limiter::from_framerate(current_fps_limiter);
+                    }
+                }
+            });
+        });
+
+    if change_background {
         if background_color.0 == LIGHT_COLOR {
             background_color.0 = DARK_COLOR;
         } else {
             background_color.0 = LIGHT_COLOR;
         }
     }
+
+    Ok(())
 }

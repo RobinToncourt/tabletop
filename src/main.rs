@@ -1,6 +1,7 @@
 #![allow(clippy::needless_pass_by_value)]
 
 mod camera;
+#[cfg(debug_assertions)]
 mod debug;
 mod items;
 mod socket;
@@ -8,8 +9,8 @@ mod ui;
 
 use bevy::asset::AssetMetaCheck;
 use bevy::prelude::*;
-
-use bevy_framepace::FramepacePlugin;
+use bevy::winit::WinitSettings;
+use bevy_framepace::{FramepacePlugin, FramepaceSettings, Limiter};
 
 fn main() {
     App::new()
@@ -31,11 +32,16 @@ fn main() {
                     ..default()
                 }),
             FramepacePlugin,
-            items::ItemsPlugin,
             camera::CameraPlugin,
+            items::ItemsPlugin,
             debug::DebugPlugin,
             ui::UiPlugin,
             // socket::SocketPlugin,
         ))
+        .add_systems(Startup, setup_framepace)
         .run();
+}
+
+fn setup_framepace(mut settings: ResMut<FramepaceSettings>) {
+    settings.limiter = Limiter::from_framerate(30.0);
 }

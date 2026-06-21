@@ -127,10 +127,13 @@ fn add_outline(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<OutlineMaterial>>,
     atlas_layouts: Res<Assets<TextureAtlasLayout>>,
+    images: Res<Assets<Image>>,
     newly_selected: Query<(Entity, &Sprite), Added<Selected>>,
 ) {
+    const OUTLINE_THICKNESS_WORLD_UNITS: f32 = 3.0;
+
     for (entity, sprite) in &newly_selected {
-        let (region, base_size) = match &sprite.texture_atlas {
+        let (region, base_size, region_pixel_size) = match &sprite.texture_atlas {
             Some(atlas) => {
                 let layout = atlas_layouts.get(&atlas.layout).unwrap();
                 let rect = layout.textures[atlas.index];
@@ -143,15 +146,25 @@ fn add_outline(
                         rect.max.y as f32 / size.y,
                     ),
                     rect.size().as_vec2(),
+                    rect.size().as_vec2(),
                 )
             }
-            None => (
-                Vec4::new(0.0, 0.0, 1.0, 1.0),
-                sprite.custom_size.unwrap_or(Vec2::splat(64.0)),
-            ),
+            None => {
+                let base_size = sprite.custom_size.unwrap_or(Vec2::splat(64.0));
+                let native_size = images
+                    .get(&sprite.image)
+                    .map(|img| img.size().as_vec2())
+                    .unwrap_or(base_size);
+                (Vec4::new(0.0, 0.0, 1.0, 1.0), base_size, native_size)
+            }
         };
 
-        let mesh_scale = 1.15;
+        let texels_per_world_unit = region_pixel_size.x / base_size.x;
+        let outline_px = OUTLINE_THICKNESS_WORLD_UNITS * texels_per_world_unit;
+
+        let margin_per_side = OUTLINE_THICKNESS_WORLD_UNITS * 1.5;
+        let mesh_scale = 1.0 + (2.0 * margin_per_side / base_size.x.min(base_size.y));
+
         commands.entity(entity).with_children(|parent| {
             parent.spawn((
                 SelectionOutline,
@@ -163,7 +176,7 @@ fn add_outline(
                     texture: sprite.image.clone(),
                     color: LinearRgba::rgb(1.0, 0.85, 0.1),
                     region,
-                    outline_px: 5.0,
+                    outline_px,
                     mesh_scale,
                 })),
                 Pickable::IGNORE,
@@ -322,10 +335,7 @@ fn spawn_cards(
             z_transform.get_then_increase(),
         );
 
-        spawn_draggable(
-            &mut commands,
-            (sprite, Pickable::default(), transform),
-        );
+        spawn_draggable(&mut commands, (sprite, Pickable::default(), transform));
     }
 
     // Spawn card back.
@@ -341,10 +351,7 @@ fn spawn_cards(
         z_transform.get_then_increase(),
     );
 
-    spawn_draggable(
-        &mut commands,
-        (sprite, Pickable::default(), transform),
-    );
+    spawn_draggable(&mut commands, (sprite, Pickable::default(), transform));
 }
 
 fn spawn_draggable<T>(commands: &mut Commands, bundle: T)

@@ -6,6 +6,7 @@ edition = "2024"
 include = ["**/*.rs", "Cargo.toml"]
 rust-version = "1.88"
 
+# The bevy_* crates version depends on bevy version.
 [dependencies]
 # Game engine.
 bevy = { version = "0.17.2", default-features = false, features = [
@@ -17,14 +18,16 @@ bevy = { version = "0.17.2", default-features = false, features = [
     "bevy_picking", "bevy_sprite_picking_backend", "bevy_ui_picking_backend",
     "png", "bevy_log",
 ] }
-# Bevy support crate for networking, version is binded to bevy version
+# Bevy support crate for networking.
 bevy_matchbox = "0.13.0"
-# Bevy framerate configuration, version is binded to bevy version
+# Bevy framerate configuration.
 bevy_framepace = "0.20"
+# Ui.
+bevy_egui = "0.38"
 
 # Enable webgl2 feature only for wasm build.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-bevy = { version = "0.17.2", features = ["webgl2"] }
+bevy = { version = "0.17.2", features = ["webgpu", "webgl2"] }
 
 # Enable x11 and wayland feature only for linux build.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
